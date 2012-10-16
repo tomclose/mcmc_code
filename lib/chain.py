@@ -18,8 +18,8 @@ class Chain:
         new = current.generate_next(newstate=True)
         p = current.likelihood()
         q = new.likelihood()
-        r = q/p
-        if np.random.rand() < r: # includes the r>1 case
+        # r = q/p not robust, instead of X < r do p*X < q
+        if p * np.random.rand() < q: # includes the r>1 case
             self.states.append(new)
             self.errors.append(new.has_logical_x_error())
             return True

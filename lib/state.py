@@ -27,23 +27,37 @@ class State:
     def __init__(self, L, p):
         self.L = L
         self.array = np.zeros((L,L), dtype='uint8')
+        self.matching = np.zeros((L,L), dtype='bool')
         self.p_val = p
+        self.next_state = None
 
     def show(self):
         fig = plt.gcf()# or plt.figure()
         fig.clf()
         ax = fig.add_subplot(111)
         # Decide how to show array:
-        #  - 0 is a non-firing stabiliser
-        #  - 1 is a non-error qubit
-        #  - 2 is a firing stabiliser
-        #  - 3 is an error qubit
+        #  - 0 is a non-firing X stabiliser
+        #  - 1 is a non-firing Z stabiliser
+        #  - 2 is a non-error qubit
+        #  - 5 is an error qubit
+        #  - 6 is a firing stabiliser
         show_array = np.zeros((self.L, self.L), dtype='int')
-        show_array += 2* self.array
-        show_array += self.qubit_mask()
-        cax = ax.imshow(show_array, interpolation='nearest', vmax=3)
-        cbar = plt.colorbar(cax, ticks=[0, 1, 2, 3])
-        cbar.ax.set_yticklabels(['stab', 'qubit', 'firing stab', 'error qubit'])
+        show_array[self.z_stabiliser_mask()] = 1 # Z stab = 1
+        show_array[self.qubit_mask()] = 2
+        show_array[np.where(self.x_stabiliser_mask()*self.array == 1)] = 4
+        show_array[np.where(self.qubit_mask()*self.array == 1)] = 6
+        cax = ax.imshow(show_array, interpolation='nearest', vmax=6)
+        cbar = plt.colorbar(cax, ticks=[0, 1, 2, 4, 6])
+        cbar.ax.set_yticklabels(['X stab', 'Z stab','qubit', 'firing X stab', 'error qubit'])
+        for x, y in np.argwhere(self.matching > 0):
+            circ = plt.Circle((y, x), radius = 0.3)
+            # it seems that matplotlib transposes the coords
+            # of an imshow such that the coords where 
+            # a[i,j] are shown are actually (j, i)
+            # this makes sense, as for arrays j corresponds
+            # to horizontal movement, whereas the convention
+            # for graph coords is (x=horiz, y=vert)
+            ax.add_patch(circ)
         plt.show() # in case not already drawn
         plt.draw() # refresh if drawn
         return show_array
@@ -102,53 +116,61 @@ class State:
         return p**n * (1-p)**(N-n)
 
     def has_logical_x_error(self):
-        syndrome_sum = 0
-        for i in range(0,self.L, 2):
-            j = 0
-            a = self.array
-            nl, nr, nt, nb = a[i-1, j], a[(i+1)%self.L, j], a[i, j-1], a[i, (j+1)%self.L]
-            n = nl ^ nr ^ nt ^ nb
-            syndrome_sum = syndrome_sum ^ n
-        return syndrome_sum % 2 == 1
+        error_sum = 0
+        # measure out the qubits along a Z column
+        for i in range(0, self.L, 2):
+            j = 1
+            n = self.array[i, j]^self.matching[i,j]
+            error_sum = error_sum ^ n
+        return error_sum & 1 == 1
 
     def generate_matching(self):
         coords = self.generate_x_syndrome()
+        self.matching = np.zeros(np.shape(self.array), dtype='bool')
         # find coords of x anyons
         # for each one Z flip the qubits required to 
         # connect it to (0,0)
+        m = self.matching
         for I, J in coords:
             # Z flip first row up to I
             for i in range(1, I+1, 2): #know first qubit is at 1
-                self.array[i, 0] = self.array[i, 0] ^ 1
+                m[i, 0] = m[i, 0] ^ 1
             # Z flip Ith column up to J
-            for j in range(I%2 + 1, J+1, 2):
-                self.array[I, j] = self.array[I, j] ^ 1
+            for j in range((I+1)%2, J+1, 2):
+                m[I, j] = m[I, j] ^ 1
+        return m
 
 
     def generate_errors(self):
         n_qubits = np.sum(self.qubit_mask())
         errors = np.random.rand(n_qubits) < self.p_val
         self.array[self.qubit_mask()] = errors
+    
+    def set_next_state(self, state):
+        self.next_state = state
 
     def generate_next(self, **kwargs):
-        newstate = kwargs['newstate']
-        if not newstate:
-            s = self
+        newstate = kwargs.get('newstate')
+        if self.next_state:
+            s = self.next_state
+            if not newstate:
+                self.array = s.array.copy()
+                s = self
+            self.next_state = None
         else:
-            s = State(self.L, self.p_val)
-            s.array = self.array.copy()
-        # pick a random z site
-        xs, ys = np.where(s.z_stabiliser_mask()==1)
-        n = len(xs)
-        r = np.random.random_integers(0, n-1)
-        x, y = xs[r], ys[r]
-        # apply the stabilizer at that point
-        a = s.array
-        L = np.shape(a)[0]
-        a[x-1, y] = not a[x-1, y] # logical flip
-        a[x, y-1] = not a[x, y-1] # logical flip
-        a[(x+1)%L, y] = not a[(x+1)%L, y] # logical flip
-        a[x, (y+1)%L] = not a[x, (y+1)%x] # logical flip
+            if not newstate:
+                s = self
+            else:
+                s = State(self.L, self.p_val)
+                s.array = self.array.copy()
+                s.matching = self.matching
+            # pick a random z site
+            n = len(s.z_stabiliser_indices())
+            r = np.random.random_integers(0, n-1)
+            x, y = s.z_stabiliser_indices()[r]
+            # apply the stabilizer at that point
+            for i,j in s.neighbours(x,y):
+                s.array[i,j] = s.array[i,j] ^ 1
         return s
     
     def dump_s(self):
