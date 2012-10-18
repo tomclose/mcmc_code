@@ -27,9 +27,17 @@ class State:
     def __init__(self, L, p):
         self.L = L
         self.array = np.zeros((L,L), dtype='uint8')
-        self.matching = np.zeros((L,L), dtype='bool')
         self.p_val = p
-        self.next_state = None
+        self._qubit_mask = None
+        self._matching = None
+        self.error_types = ['None', 'X']
+
+    @property
+    def matching(self):
+        if self._matching is None:
+            self.generate_matching()
+        return self._matching
+
 
     def show(self):
         fig = plt.gcf()# or plt.figure()
@@ -43,9 +51,9 @@ class State:
         #  - 6 is a firing stabiliser
         show_array = np.zeros((self.L, self.L), dtype='int')
         show_array[self.z_stabiliser_mask()] = 1 # Z stab = 1
-        show_array[self.qubit_mask()] = 2
+        show_array[self.qubit_mask] = 2
         show_array[np.where(self.x_stabiliser_mask()*self.array == 1)] = 4
-        show_array[np.where(self.qubit_mask()*self.array == 1)] = 6
+        show_array[np.where(self.qubit_mask*self.array == 1)] = 6
         cax = ax.imshow(show_array, interpolation='nearest', vmax=6)
         cbar = plt.colorbar(cax, ticks=[0, 1, 2, 4, 6])
         cbar.ax.set_yticklabels(['X stab', 'Z stab','qubit', 'firing X stab', 'error qubit'])
@@ -71,10 +79,17 @@ class State:
     def neighbours(self, i, j):
         return [(i-1, j), (i, j-1), ((i+1)%self.L, j), (i, (j+1)%self.L)]
 
+    @property
     def qubit_mask(self):
+        if self._qubit_mask is None:
+            self.generate_qubit_mask()
+        return self._qubit_mask
+
+    def generate_qubit_mask(self):
         a = np.zeros((self.L, self.L), dtype='bool')
         for i,j in self.qubit_indices():
             a[i, j] = 1
+        self._qubit_mask = a
         return a
 
     def x_stabiliser_mask(self):
@@ -96,7 +111,7 @@ class State:
         for i,j in self.z_stabiliser_indices():
             a[i, j] = 1
         return a
-    
+
     def generate_x_syndrome(self):
         coords = []
         for i, j in self.x_stabiliser_indices():
@@ -110,10 +125,16 @@ class State:
         return coords
 
     def likelihood(self):
-        n = np.sum(self.array[self.qubit_mask()])
-        N = np.sum(self.qubit_mask())
+        n = self.n_errors()
+        N = np.sum(self.qubit_mask)
         p = self.p_val
         return p**n * (1-p)**(N-n)
+
+    def n_errors(self):
+        return np.sum(self.array[self.qubit_mask])
+
+    def logical_error(self):
+        return 'X' if self.has_logical_x_error() else 'None'
 
     def has_logical_x_error(self):
         error_sum = 0
@@ -126,11 +147,10 @@ class State:
 
     def generate_matching(self):
         coords = self.generate_x_syndrome()
-        self.matching = np.zeros(np.shape(self.array), dtype='bool')
+        m = self._matching = np.zeros(np.shape(self.array), dtype='bool')
         # find coords of x anyons
         # for each one Z flip the qubits required to 
         # connect it to (0,0)
-        m = self.matching
         for I, J in coords:
             # Z flip first row up to I
             for i in range(1, I+1, 2): #know first qubit is at 1
@@ -140,39 +160,33 @@ class State:
                 m[I, j] = m[I, j] ^ 1
         return m
 
-
     def generate_errors(self):
-        n_qubits = np.sum(self.qubit_mask())
+        n_qubits = np.sum(self.qubit_mask)
         errors = np.random.rand(n_qubits) < self.p_val
-        self.array[self.qubit_mask()] = errors
-    
-    def set_next_state(self, state):
-        self.next_state = state
+        self.array[self.qubit_mask] = errors
 
-    def generate_next(self, **kwargs):
-        newstate = kwargs.get('newstate')
-        if self.next_state:
-            s = self.next_state
-            if not newstate:
-                self.array = s.array.copy()
-                s = self
-            self.next_state = None
-        else:
-            if not newstate:
-                s = self
-            else:
-                s = State(self.L, self.p_val)
-                s.array = self.array.copy()
-                s.matching = self.matching
-            # pick a random z site
-            n = len(s.z_stabiliser_indices())
-            r = np.random.random_integers(0, n-1)
-            x, y = s.z_stabiliser_indices()[r]
-            # apply the stabilizer at that point
-            for i,j in s.neighbours(x,y):
-                s.array[i,j] = s.array[i,j] ^ 1
+    def generate_next(s):
+        # pick a random z site
+        n = len(s.z_stabiliser_indices())
+        r = np.random.random_integers(0, n-1)
+        x, y = s.z_stabiliser_indices()[r]
+        # apply the stabilizer at that point
+        for i,j in s.neighbours(x,y):
+            s.array[i,j] = s.array[i,j] ^ 1
+
+    def copy_onto(self, other_state):
+        other_state.array = self.array.copy()
+        # note that matching is NOT copied - it's a reference
+        # this is fine - each time we call generate_matching()
+        #                a new one is created
+        other_state.matching = self.matching
+        return other_state
+
+    def copy(self):
+        s = State(self.L, self.p_val)
+        self.copy_onto(s)
         return s
-    
+
     def dump_s(self):
         return State.a_to_s(self.array)
 

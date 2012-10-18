@@ -15,8 +15,7 @@ print("Logical x error: ", s.has_logical_x_error())
 c = chain.Chain(s)
 for i in range(20):
     c.step()
-    print(c.errors[-1])
-    s = c.current_state()
+    s = c.current_state
     s.generate_x_syndrome()
-    c.current_state().show()
+    c.current_state.show()
 
