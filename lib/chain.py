@@ -13,7 +13,7 @@ class Chain:
 
     def step(self, next_state = None):
         current = self.current_state
-        if next_state:
+        if next_state is not None:
             new = next_state.copy_onto(self.next_state)
         else: # copy the current state and generate a new one
             new = current.copy_onto(self.next_state)

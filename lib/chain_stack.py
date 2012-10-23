@@ -1,10 +1,14 @@
 import numpy as np
+import state
 import chain
 
 def create_chainstack(s0, n_chains, n_steps):
     p = s0.p_val
     probabilities = [p + (0.5-p)/(n_chains-1)*i for i in range(n_chains)]
-    states = [s0.copy() for i in range(n_chains)]
+    states = [s0.copy() for i in range(n_chains-1)]
+    hot_state = state.HotState(s0.L, 0.5)
+    s0.copy_onto(hot_state)
+    states.append(hot_state)
     for p, s in zip(probabilities, states):
         s.p_val = p
     # set errors on first state
@@ -16,7 +20,7 @@ class ChainStack:
     def __init__(self, chains, steps):
         self.chains = chains
         # put the original chain at 0
-        self.step_counter = np.zeros(len(chains))
+        self.step_counter = np.zeros(len(chains), dtype='int')
         self.n_chains = len(chains)
         self.n_chain_steps = steps 
         self.error_types = chains[0].error_types
@@ -38,15 +42,15 @@ class ChainStack:
 
     def step(self):
         n_steps = self.n_chain_steps
-        n_chains = self.n_chains
         twist_successes = []
 
         # if other chains aren't fully advanced
-        if np.sum(self.step_counter) < (n_chains-1)*n_steps:
-            # run each of the other chains forward n steps
-            for i in range(1, self.n_chains-1):
-                self.chains[i].advance(self.n_chain_steps)
-                self.step_counter[i] = self.n_chain_steps
+        # run each of the other chains forward n steps
+        for i in range(1, self.n_chains):
+            n_to_go = n_steps - self.step_counter[i]
+            if n_to_go > 0:
+                self.chains[i].advance(n_to_go)
+            self.step_counter[i] = self.n_chain_steps
 
         # if main chain isn't fully advanced
         if self.step_counter[0] < n_steps:

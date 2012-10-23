@@ -17,5 +17,6 @@ for i in range(20):
     c.step()
     s = c.current_state
     s.generate_x_syndrome()
+    print("Logical x error: ", s.has_logical_x_error())
     c.current_state.show()
 

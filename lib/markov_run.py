@@ -7,7 +7,6 @@ class MarkovRun:
     
     def reset(self):
         self.twist_count = np.zeros(self.chain_stack.n_chains-1)
-        self.results = np.zeros((100,6))
         self.capacity = 100
         self.size = 0
         self.t = 0 # should basically always be the same as size
@@ -15,16 +14,18 @@ class MarkovRun:
                                    # in the 0 state at each stage
         self.error_types = self.chain_stack.error_types
         self.error_type_count = np.zeros(len(self.error_types))
+        self.result_length = 2 + len(self.error_types)
+        self.results = np.zeros((100,self.result_length))
 
     def append_results(self, row):
         if self.size == self.capacity:
             # expand array size
             self.capacity *= 4
-            new_results = np.zeros((self.capacity, 6))
-            new_results[:self.size, 6] = self.results[:,6]
+            new_results = np.zeros((self.capacity, self.result_length))
+            new_results[:self.size, :] = self.results[:,:]
             self.results = new_results
 
-        self.results[self.size, 6] = row[:]
+        self.results[self.size, :] = row[:]
         self.size += 1
 
     def step(self):
@@ -49,10 +50,22 @@ class MarkovRun:
 
         # results array:
         #  [tops0, total_error_count, errors_types.....]
-        tops0 = self.twist_count[0]
+        #tops0 = self.twist_count[0]
         self.total_error_count += res['state_details']['error_count']
         logical_error_index = self.error_types.index(res['state_details']['error_type'])
         self.error_type_count[logical_error_index] += 1
-
-        print(tops0, self.total_error_count, self.error_type_count, self.twist_count)
         
+        self.append_results(self.current_state())
+
+        #print(tops0, self.total_error_count, self.error_type_count, self.twist_count)
+    
+    def current_state(self):
+        l = [self.twist_count[0], self.total_error_count]
+        l.extend(self.error_type_count)
+        return l
+
+    def check_error_convergence(self):
+        total = self.size
+        q1 = total/4
+        q2 = total/2
+        q3 = (3*total)/4

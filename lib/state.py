@@ -1,6 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+def bitsum(x):
+    return sum(int(i) for i in bin(x)[2:])
+
+
 class State:
     """ State is reponsible for holding the configuration
     of a toric lattice - both errors, and stabiliser states.
@@ -112,6 +116,17 @@ class State:
             a[i, j] = 1
         return a
 
+    def to_n(self):
+        x = 0
+        ans = 0
+        for i,j in self.qubit_indices():
+            if self.array[i,j] != 0:
+                ans += 2**x
+            x+=1
+        return ans
+        
+
+
     def generate_x_syndrome(self):
         coords = []
         for i, j in self.x_stabiliser_indices():
@@ -171,8 +186,24 @@ class State:
         r = np.random.random_integers(0, n-1)
         x, y = s.z_stabiliser_indices()[r]
         # apply the stabilizer at that point
+        s.apply_stabilizer(x,y)
+
+    def apply_stabiliser(s, x, y):
         for i,j in s.neighbours(x,y):
             s.array[i,j] = s.array[i,j] ^ 1
+        return s
+
+    def generate_horizontal_z_error(s):
+        for j in range(0, s.L, 2):
+            i = 1
+            s.array[i, j] = s.array[i,j] ^ 1
+        return s
+
+    def generate_vertical_z_error(s):
+        for i in range(0, s.L, 2):
+            j = 1
+            s.array[i, j] = s.array[i,j] ^ 1
+        return s
 
     def copy_onto(self, other_state):
         other_state.array = self.array.copy()
@@ -183,7 +214,7 @@ class State:
         return other_state
 
     def copy(self):
-        s = State(self.L, self.p_val)
+        s = self.__class__(self.L, self.p_val)
         self.copy_onto(s)
         return s
 
@@ -223,4 +254,16 @@ class State:
 
 
 
-
+class HotState(State):
+    def generate_next(s):
+        if np.random.rand() < 0.5: 
+            # make a logical x error,
+            # by flipping a z row
+            for j in range(1, s.L, 2):
+                i = 0
+                s.array[i, j] = s.array[i,j] ^ 1
+        # pick a random z site
+        for x, y in s.z_stabiliser_indices():
+            if np.random.rand() < 0.5:
+                # apply the stabilizer at that point
+                s.apply_stabilizer(x,y)
