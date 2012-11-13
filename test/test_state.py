@@ -89,13 +89,13 @@ class TestState(unittest.TestCase):
         # 0 errors should always map to 0
         self.assertEqual(s.to_n(), 0)
         # find stabiliser representation
-        stab_n = s.apply_stabilizer(0,0).to_n()
+        stab_n = s.apply_stabiliser(0,0).to_n()
         # check stabiliser rep looks sensible
         self.assertEqual(bitsum(stab_n), 4)
         # do commutativity consistency check
         s.generate_errors()
         n1 = s.to_n()^stab_n # convert then apply stab
-        n2 = s.apply_stabilizer(0,0).to_n() # apply stab then convert
+        n2 = s.apply_stabiliser(0,0).to_n() # apply stab then convert
         self.assertEqual(n1, n2)
 
 

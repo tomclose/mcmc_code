@@ -42,38 +42,6 @@ class State:
             self.generate_matching()
         return self._matching
 
-
-    def show(self):
-        fig = plt.gcf()# or plt.figure()
-        fig.clf()
-        ax = fig.add_subplot(111)
-        # Decide how to show array:
-        #  - 0 is a non-firing X stabiliser
-        #  - 1 is a non-firing Z stabiliser
-        #  - 2 is a non-error qubit
-        #  - 5 is an error qubit
-        #  - 6 is a firing stabiliser
-        show_array = np.zeros((self.L, self.L), dtype='int')
-        show_array[self.z_stabiliser_mask()] = 1 # Z stab = 1
-        show_array[self.qubit_mask] = 2
-        show_array[np.where(self.x_stabiliser_mask()*self.array == 1)] = 4
-        show_array[np.where(self.qubit_mask*self.array == 1)] = 6
-        cax = ax.imshow(show_array, interpolation='nearest', vmax=6)
-        cbar = plt.colorbar(cax, ticks=[0, 1, 2, 4, 6])
-        cbar.ax.set_yticklabels(['X stab', 'Z stab','qubit', 'firing X stab', 'error qubit'])
-        for x, y in np.argwhere(self.matching > 0):
-            circ = plt.Circle((y, x), radius = 0.3)
-            # it seems that matplotlib transposes the coords
-            # of an imshow such that the coords where 
-            # a[i,j] are shown are actually (j, i)
-            # this makes sense, as for arrays j corresponds
-            # to horizontal movement, whereas the convention
-            # for graph coords is (x=horiz, y=vert)
-            ax.add_patch(circ)
-        plt.show() # in case not already drawn
-        plt.draw() # refresh if drawn
-        return show_array
-
     def x_stabiliser_indices(self):
         return [(i,j) for i in range(0, self.L, 2) for j in range(0, self.L, 2)]
     def z_stabiliser_indices(self):
@@ -82,6 +50,27 @@ class State:
         return [(i,j) for j in range(0, self.L) for i in range((j+1)%2, self.L, 2)]
     def neighbours(self, i, j):
         return [(i-1, j), (i, j-1), ((i+1)%self.L, j), (i, (j+1)%self.L)]
+
+    def likelihood(self):
+        n = self.n_errors()
+        N = np.sum(self.qubit_mask)
+        p = self.p_val
+        return p**n * (1-p)**(N-n)
+
+    def n_errors(self):
+        return np.sum(self.array[self.qubit_mask])
+
+    def logical_error(self):
+        return 'X' if self.has_logical_x_error() else 'None'
+
+    def has_logical_x_error(self):
+        error_sum = 0
+        # measure out the qubits along a Z column
+        for i in range(0, self.L, 2):
+            j = 1
+            n = self.array[i, j]^self.matching[i,j]
+            error_sum = error_sum ^ n
+        return error_sum & 1 == 1
 
     @property
     def qubit_mask(self):
@@ -124,8 +113,6 @@ class State:
                 ans += 2**x
             x+=1
         return ans
-        
-
 
     def generate_x_syndrome(self):
         coords = []
@@ -138,27 +125,6 @@ class State:
                 a[i, j] = 1
                 coords.append((i,j))
         return coords
-
-    def likelihood(self):
-        n = self.n_errors()
-        N = np.sum(self.qubit_mask)
-        p = self.p_val
-        return p**n * (1-p)**(N-n)
-
-    def n_errors(self):
-        return np.sum(self.array[self.qubit_mask])
-
-    def logical_error(self):
-        return 'X' if self.has_logical_x_error() else 'None'
-
-    def has_logical_x_error(self):
-        error_sum = 0
-        # measure out the qubits along a Z column
-        for i in range(0, self.L, 2):
-            j = 1
-            n = self.array[i, j]^self.matching[i,j]
-            error_sum = error_sum ^ n
-        return error_sum & 1 == 1
 
     def generate_matching(self):
         coords = self.generate_x_syndrome()
@@ -186,7 +152,7 @@ class State:
         r = np.random.random_integers(0, n-1)
         x, y = s.z_stabiliser_indices()[r]
         # apply the stabilizer at that point
-        s.apply_stabilizer(x,y)
+        s.apply_stabiliser(x,y)
 
     def apply_stabiliser(s, x, y):
         for i,j in s.neighbours(x,y):
@@ -218,8 +184,41 @@ class State:
         self.copy_onto(s)
         return s
 
+    # Displaying
+    # ==========
     def dump_s(self):
         return State.a_to_s(self.array)
+
+    def show(self):
+        fig = plt.gcf()# or plt.figure()
+        fig.clf()
+        ax = fig.add_subplot(111)
+        # Decide how to show array:
+        #  - 0 is a non-firing X stabiliser
+        #  - 1 is a non-firing Z stabiliser
+        #  - 2 is a non-error qubit
+        #  - 5 is an error qubit
+        #  - 6 is a firing stabiliser
+        show_array = np.zeros((self.L, self.L), dtype='int')
+        show_array[self.z_stabiliser_mask()] = 1 # Z stab = 1
+        show_array[self.qubit_mask] = 2
+        show_array[np.where(self.x_stabiliser_mask()*self.array == 1)] = 4
+        show_array[np.where(self.qubit_mask*self.array == 1)] = 6
+        cax = ax.imshow(show_array, interpolation='nearest', vmax=6)
+        cbar = plt.colorbar(cax, ticks=[0, 1, 2, 4, 6])
+        cbar.ax.set_yticklabels(['X stab', 'Z stab','qubit', 'firing X stab', 'error qubit'])
+        for x, y in np.argwhere(self.matching > 0):
+            circ = plt.Circle((y, x), radius = 0.3)
+            # it seems that matplotlib transposes the coords
+            # of an imshow such that the coords where 
+            # a[i,j] are shown are actually (j, i)
+            # this makes sense, as for arrays j corresponds
+            # to horizontal movement, whereas the convention
+            # for graph coords is (x=horiz, y=vert)
+            ax.add_patch(circ)
+        plt.show() # in case not already drawn
+        plt.draw() # refresh if drawn
+        return show_array
 
     @staticmethod
     def a_to_s(array):
@@ -266,4 +265,4 @@ class HotState(State):
         for x, y in s.z_stabiliser_indices():
             if np.random.rand() < 0.5:
                 # apply the stabilizer at that point
-                s.apply_stabilizer(x,y)
+                s.apply_stabiliser(x,y)
