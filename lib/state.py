@@ -32,7 +32,6 @@ class State:
         self.L = L
         self.array = np.zeros((L,L), dtype='uint8')
         self.p_val = p
-        self._qubit_mask = None
         self._matching = None
         self.error_types = ['None', 'X']
 
@@ -53,12 +52,12 @@ class State:
 
     def likelihood(self):
         n = self.n_errors()
-        N = np.sum(self.qubit_mask)
+        N = len(self.qubit_indices())
         p = self.p_val
         return p**n * (1-p)**(N-n)
 
     def n_errors(self):
-        return np.sum(self.array[self.qubit_mask])
+        return np.sum(self.array[zip(*self.qubit_indices())])
 
     def logical_error(self):
         return 'X' if self.has_logical_x_error() else 'None'
@@ -71,39 +70,6 @@ class State:
             n = self.array[i, j]^self.matching[i,j]
             error_sum = error_sum ^ n
         return error_sum & 1 == 1
-
-    @property
-    def qubit_mask(self):
-        if self._qubit_mask is None:
-            self.generate_qubit_mask()
-        return self._qubit_mask
-
-    def generate_qubit_mask(self):
-        a = np.zeros((self.L, self.L), dtype='bool')
-        for i,j in self.qubit_indices():
-            a[i, j] = 1
-        self._qubit_mask = a
-        return a
-
-    def x_stabiliser_mask(self):
-        """Returns a boolean array of x stabiliser positions.
-
-        The x stabilisers occur on (i,j) where both i and j are even
-        """
-        a = np.zeros((self.L, self.L), dtype='bool')
-        for i,j in self.x_stabiliser_indices():
-            a[i, j] = 1
-        return a
-
-    def z_stabiliser_mask(self):
-        """Returns a boolean array of z stabiliser positions.
-
-        The z stabilisers occur on (i,j) where both i and j are odd
-        """
-        a = np.zeros((self.L, self.L), dtype='bool')
-        for i,j in self.z_stabiliser_indices():
-            a[i, j] = 1
-        return a
 
     def to_n(self):
         x = 0
@@ -142,9 +108,9 @@ class State:
         return m
 
     def generate_errors(self):
-        n_qubits = np.sum(self.qubit_mask)
+        n_qubits = len(self.qubit_indices())
         errors = np.random.rand(n_qubits) < self.p_val
-        self.array[self.qubit_mask] = errors
+        self.array[zip(*self.qubit_indices())] = errors
 
     def generate_next(s):
         # pick a random z site
@@ -200,10 +166,10 @@ class State:
         #  - 5 is an error qubit
         #  - 6 is a firing stabiliser
         show_array = np.zeros((self.L, self.L), dtype='int')
-        show_array[self.z_stabiliser_mask()] = 1 # Z stab = 1
-        show_array[self.qubit_mask] = 2
-        show_array[np.where(self.x_stabiliser_mask()*self.array == 1)] = 4
-        show_array[np.where(self.qubit_mask*self.array == 1)] = 6
+        show_array[zip(*self.z_stabiliser_indices())] = 1 # Z stab = 1
+        show_array[zip(*self.qubit_indices())] = 2
+        show_array[zip(*self.x_stabiliser_indices())] *= 4
+        show_array[zip(*self.qubit_indices())] *= 6
         cax = ax.imshow(show_array, interpolation='nearest', vmax=6)
         cbar = plt.colorbar(cax, ticks=[0, 1, 2, 4, 6])
         cbar.ax.set_yticklabels(['X stab', 'Z stab','qubit', 'firing X stab', 'error qubit'])
