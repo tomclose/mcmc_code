@@ -1,30 +1,40 @@
 import numpy as np
+import itertools as it
 #import state
 
-class Chain:
-    def __init__(self, s0):
-        self.current_state = s0
-        self.next_state = s0.copy()
-        self.error_types = s0.error_types
+def path(s0):
+    current_state = s0
+    next_state = s0.copy()
+    changed = False # did current_state change last time
 
-    def advance(self, n):
-        for i in range(n):
-            self.step()
-
-    def step(self, next_state = None):
-        current = self.current_state
-        if next_state is not None:
-            new = next_state.copy_onto(self.next_state)
-        else: # copy the current state and generate a new one
-            new = current.copy_onto(self.next_state)
-            new.generate_next()
-        p = current.likelihood()
+    while(1):
+        new = current_state.copy_onto(next_state)
+        new.generate_next()
+        p = current_state.likelihood()
         q = new.likelihood()
+        print(p, q)
         # r = q/p not robust, instead of X < r do p*X < q
         if p * np.random.rand() < q: # includes the r>1 case
-            self.next_state.copy_onto(self.current_state)
-            return True
+            next_state.copy_onto(current_state)
+            changed = True
         else:
-            return False
+            changed = False
+        yield (current_state,new,  changed)
+
+
+def aggregate(c):
+    p = 0
+    i = 0
+    for (s, n, changed) in c:
+        i+=1
+        p += s.likelihood()
+        yield (i, p)
+
+def n_jumps(c, n):
+    return it.islice(c, n, None, n)
+
+
+def path_set(*paths):
+    return it.izip(*paths)
 
 

@@ -45,7 +45,7 @@ class TestState(unittest.TestCase):
     def testGenerateErrors(self):
         s = State(6, 0)
         s.generate_errors()
-        self.assertEqual(0, np.sum(s.array[zip(*s.qubit_indices())]))
+        self.assertEqual(0, np.sum(s.array[zip(*s.qubit_indices)]))
     def testToStringAndBack(self):
         s = State(6, 0.5)
         s.generate_errors()
