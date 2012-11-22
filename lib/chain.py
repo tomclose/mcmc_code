@@ -12,7 +12,7 @@ def path(s0):
         new.generate_next()
         p = current_state.likelihood()
         q = new.likelihood()
-        print(p, q)
+        #print(p, q)
         # r = q/p not robust, instead of X < r do p*X < q
         if p * np.random.rand() < q: # includes the r>1 case
             next_state.copy_onto(current_state)
@@ -32,6 +32,9 @@ def aggregate(c):
 
 def n_jumps(c, n):
     return it.islice(c, n, None, n)
+
+def first_n(c, n):
+    return it.islice(c, 0, n)
 
 
 def path_set(*paths):

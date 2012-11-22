@@ -1,13 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-def bitsum(x):
-    return sum(int(i) for i in bin(x)[2:])
 
-
-class State:
+class ToricLattice:
     """ State is reponsible for holding the configuration
-    of a toric lattice - both errors, and stabiliser states.
+    of a toric lattice - both errors and stabiliser states.
     
     The lattice has side length L, which is taken to be even
     (so the toric edges match).
@@ -28,10 +25,9 @@ class State:
     Currently we only deal with Z flips, detected by X plaquettes.
 
     """
-    def __init__(self, L, p):
+    def __init__(self, L):
         self.L = L
         self.array = np.zeros((L,L), dtype='uint8')
-        self.p_val = p
         self._matching = None
         self.error_types = ['None', 'X']
 
@@ -41,59 +37,100 @@ class State:
             self.generate_matching()
         return self._matching
 
+    @property
+    def x_col_indices(self):
+        return range(0, self.L, 2)
+    @property
+    def x_row_indices(self):
+        return range(0, self.L, 2)
+    @property
+    def z_col_indices(self):
+        return range(1, self.L, 2)
+    @property
+    def z_row_indices(self):
+        return range(1, self.L, 2)
+
+    @property
     def x_stabiliser_indices(self):
-        return [(i,j) for i in range(0, self.L, 2) for j in range(0, self.L, 2)]
+        return [(i,j) for i in self.x_col_indices for j in self.x_row_indices]
+    @property
     def z_stabiliser_indices(self):
-        return [(i,j) for i in range(1, self.L, 2) for j in range(1, self.L, 2)]
+        return [(i,j) for i in self.z_row_indices for j in self.z_row_indices]
+    @property
     def qubit_indices(self):
         return [(i,j) for j in range(0, self.L) for i in range((j+1)%2, self.L, 2)]
     def neighbours(self, i, j):
         return [(i-1, j), (i, j-1), ((i+1)%self.L, j), (i, (j+1)%self.L)]
+    def site_type(self, i, j):
+        """ Returns:
+                0 - for a qubit
+                1 - for an X plaquette (as they detect z errors)
+                2 - for a Z plaquette
+        """
+        i_even, j_even = i%2, j%2
+        if i_even and j_even:
+            return 1
+        elif not i_even and not j_even:
+            return 2
+        else:
+            return 0
 
-    def likelihood(self):
-        n = self.n_errors()
-        N = len(self.qubit_indices())
-        p = self.p_val
-        return p**n * (1-p)**(N-n)
+    # Querying
+    # ========
 
     def n_errors(self):
-        return np.sum(self.array[zip(*self.qubit_indices())])
+        return np.sum(self.array[zip(*self.qubit_indices)])
 
     def logical_error(self):
         return 'X' if self.has_logical_x_error() else 'None'
 
-    def has_logical_x_error(self):
+    def measure_hor_x(s):
         error_sum = 0
         # measure out the qubits along a Z column
-        for i in range(0, self.L, 2):
-            j = 1
-            n = self.array[i, j]^self.matching[i,j]
+        j = s.z_col_indices[0]
+        for i in s.x_row_indices:
+            n = s.array[i, j]^s.matching[i,j]
+            error_sum = error_sum ^ n
+        return error_sum & 1 == 1
+    def measure_hor_z(s):
+        error_sum = 0
+        # measure out the qubits along a X column
+        j = s.x_col_indices[0]
+        for i in s.z_row_indices:
+            n = s.array[i, j]^s.matching[i,j]
+            error_sum = error_sum ^ n
+        return error_sum & 1 == 1
+    def measure_vert_x(s):
+        error_sum = 0
+        # measure out the qubits along a Z row
+        i = s.z_row_indices[0]
+        for j in s.x_row_indices:
+            n = s.array[i, j]^s.matching[i,j]
+            error_sum = error_sum ^ n
+        return error_sum & 1 == 1
+    def measure_vert_z(s):
+        error_sum = 0
+        # measure out the qubits along a X row
+        i = s.x_row_indices[0]
+        for j in s.z_row_indices:
+            n = s.array[i, j]^s.matching[i,j]
             error_sum = error_sum ^ n
         return error_sum & 1 == 1
 
-    def to_n(self):
-        x = 0
-        ans = 0
-        for i,j in self.qubit_indices():
-            if self.array[i,j] != 0:
-                ans += 2**x
-            x+=1
-        return ans
-
-    def generate_x_syndrome(self):
+    # Actions
+    # =======
+    def generate_syndrome(s):
         coords = []
-        for i, j in self.x_stabiliser_indices():
-            a = self.array
-            ans = reduce(np.bitwise_xor, [a[x] for x in self.neighbours(i,j)])
-            if ans % 2 == 0:
-                a[i, j] = 0
+        for i, j in s.x_stabiliser_indices + s.z_stabiliser_indices:
+            if s.measure_stabiliser(i,j):
+                s.array[i, j] = 0
             else:
-                a[i, j] = 1
+                s.array[i, j] = 1
                 coords.append((i,j))
         return coords
 
     def generate_matching(self):
-        coords = self.generate_x_syndrome()
+        coords = self.generate_syndrome()
         m = self._matching = np.zeros(np.shape(self.array), dtype='bool')
         # find coords of x anyons
         # for each one Z flip the qubits required to 
@@ -107,34 +144,42 @@ class State:
                 m[I, j] = m[I, j] ^ 1
         return m
 
-    def generate_errors(self):
-        n_qubits = len(self.qubit_indices())
-        errors = np.random.rand(n_qubits) < self.p_val
-        self.array[zip(*self.qubit_indices())] = errors
-
-    def generate_next(s):
-        # pick a random z site
-        n = len(s.z_stabiliser_indices())
-        r = np.random.random_integers(0, n-1)
-        x, y = s.z_stabiliser_indices()[r]
-        # apply the stabilizer at that point
-        s.apply_stabiliser(x,y)
-
     def apply_stabiliser(s, x, y):
         for i,j in s.neighbours(x,y):
             s.array[i,j] = s.array[i,j] ^ 1
         return s
 
-    def generate_horizontal_z_error(s):
-        for j in range(0, s.L, 2):
-            i = 1
+    def measure_stabiliser(s, x, y):
+        return bool(s.site_type(x,y) & reduce(np.bitwise_xor, [s.array[c] for c in s.neighbours(x,y)]))
+
+    def apply_hor_x(s):
+        # flip qubits in between a row of xs
+        j = s.z_row_indices[0]
+        for i in s.x_col_indices:
+            s.array[i, j] = s.array[i,j] ^ 1
+        return s
+    def apply_vert_x(s):
+        # flip qubits inbetween a col of xs
+        i = s.z_col_indices[0]
+        for j in s.x_row_indices:
+            s.array[i, j] = s.array[i,j] ^ 1
+        return s
+    def apply_hor_z(s):
+        # flip qubits in between a row of xs
+        j = s.x_row_indices[0]
+        for i in s.z_col_indices:
+            s.array[i, j] = s.array[i,j] ^ 1
+        return s
+    def apply_vert_z(s):
+        # flip qubits inbetween a col of xs
+        i = s.x_col_indices[0]
+        for j in s.z_row_indices:
             s.array[i, j] = s.array[i,j] ^ 1
         return s
 
-    def generate_vertical_z_error(s):
-        for i in range(0, s.L, 2):
-            j = 1
-            s.array[i, j] = s.array[i,j] ^ 1
+    def copy(self):
+        s = self.__class__(self.L)
+        self.copy_onto(s)
         return s
 
     def copy_onto(self, other_state):
@@ -145,15 +190,18 @@ class State:
         other_state.matching = self.matching
         return other_state
 
-    def copy(self):
-        s = self.__class__(self.L, self.p_val)
-        self.copy_onto(s)
-        return s
 
     # Displaying
     # ==========
     def dump_s(self):
-        return State.a_to_s(self.array)
+        return __class__.a_to_s(self.array)
+
+    def to_n(self):
+        # WARNING - only represents x errors
+        ans = 0
+        for i,j in self.qubit_indices:
+            ans = ans*2 + self.array[i,j]
+        return ans
 
     def show(self):
         fig = plt.gcf()# or plt.figure()
@@ -163,13 +211,16 @@ class State:
         #  - 0 is a non-firing X stabiliser
         #  - 1 is a non-firing Z stabiliser
         #  - 2 is a non-error qubit
-        #  - 5 is an error qubit
-        #  - 6 is a firing stabiliser
+        #  - 6 is an error qubit
+        #  - 4 is a firing stabiliser
         show_array = np.zeros((self.L, self.L), dtype='int')
-        show_array[zip(*self.z_stabiliser_indices())] = 1 # Z stab = 1
-        show_array[zip(*self.qubit_indices())] = 2
-        show_array[zip(*self.x_stabiliser_indices())] *= 4
-        show_array[zip(*self.qubit_indices())] *= 6
+        a = self.array
+        for (i,j) in self.x_stabiliser_indices:
+            show_array[i,j] = 4 if a[i,j]==1 else 0
+        for (i,j) in self.x_stabiliser_indices:
+            show_array[i,j] = 4 if a[i,j]==1 else 1
+        for (i,j) in self.qubit_indices:
+            show_array[i,j] = 6 if a[i,j]==1 else 2
         cax = ax.imshow(show_array, interpolation='nearest', vmax=6)
         cbar = plt.colorbar(cax, ticks=[0, 1, 2, 4, 6])
         cbar.ax.set_yticklabels(['X stab', 'Z stab','qubit', 'firing X stab', 'error qubit'])
@@ -218,8 +269,41 @@ class State:
         return np.array([[t(elt) for elt in s.split(" ")] for s in string.strip().split('\n')])
 
 
+class UniformToricState(ToricLattice):
+    def __init__(self, L, p):
+        ToricLattice.__init__(self, L)
+        self.p = p
 
-class HotState(State):
+    def likelihood(self):
+        n = self.n_errors()
+        N = len(self.qubit_indices)
+        p = self.p
+        return p**n * (1-p)**(N-n)
+
+    def generate_errors(self):
+        n_qubits = len(self.qubit_indices)
+        errors = np.random.rand(n_qubits) < self.p
+        self.array[zip(*self.qubit_indices)] = errors
+
+    def copy(self):
+        s = self.__class__(self.L, self.p)
+        self.copy_onto(s)
+        return s
+
+    def generate_next(s):
+        # pick a random z site
+        n = len(s.z_stabiliser_indices)
+        r = np.random.random_integers(0, n-1)
+        x, y = s.z_stabiliser_indices[r]
+        # apply the stabilizer at that point
+        s.apply_stabiliser(x,y)
+
+
+
+
+
+
+class HotState(ToricLattice):
     def generate_next(s):
         if np.random.rand() < 0.5: 
             # make a logical x error,
@@ -228,7 +312,7 @@ class HotState(State):
                 i = 0
                 s.array[i, j] = s.array[i,j] ^ 1
         # pick a random z site
-        for x, y in s.z_stabiliser_indices():
+        for x, y in s.z_stabiliser_indices:
             if np.random.rand() < 0.5:
                 # apply the stabilizer at that point
                 s.apply_stabiliser(x,y)
