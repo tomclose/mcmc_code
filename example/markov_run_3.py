@@ -26,8 +26,8 @@ count = 0
 for current, next_s, changed in p:
     count+=1
     total_n += current.n_errors()
-    print(total_n*1.0/count, av_i)
-    if count%1000 == 0:
+    if count%100000 == 0:
+        print(total_n*1.0/count, av_i)
         raw_input()
 
 

@@ -22,14 +22,25 @@ class ToricLattice:
     The Z plaquettes lie at (i, j), where both i and j are odd.
     The fire if surrounded by and odd numper of {X, Y} flips
 
-    Currently we only deal with Z flips, detected by X plaquettes.
-
+    Measure_vert_z detects any logical vertical z errors, by measuring for zs along a vertical z row.
+    Apply_vert_z applies a vertical z error, by flipping along a horizontal x row
+    
+    X 1 X 1 X 1     <-- this is a vertical Z error
+    . Z . Z . Z         it can't be seen by the Xs
+    X . X . X .
+    . Z . Z . Z
+    X . X . X .
+    . Z . Z . Z
+    
     """
     def __init__(self, L):
         self.L = L
         self.array = np.zeros((L,L), dtype='uint8')
         self._matching = None
         self.error_types = ['None', 'X']
+
+
+
 
     @property
     def matching(self):
@@ -38,24 +49,24 @@ class ToricLattice:
         return self._matching
 
     @property
-    def x_col_indices(self):
+    def x_i_indices(self):
         return range(0, self.L, 2)
     @property
-    def x_row_indices(self):
+    def x_j_indices(self):
         return range(0, self.L, 2)
     @property
-    def z_col_indices(self):
+    def z_j_indices(self):
         return range(1, self.L, 2)
     @property
-    def z_row_indices(self):
+    def z_i_indices(self):
         return range(1, self.L, 2)
 
     @property
     def x_stabiliser_indices(self):
-        return [(i,j) for i in self.x_col_indices for j in self.x_row_indices]
+        return [(i,j) for i in self.x_i_indices for j in self.x_j_indices]
     @property
     def z_stabiliser_indices(self):
-        return [(i,j) for i in self.z_row_indices for j in self.z_row_indices]
+        return [(i,j) for i in self.z_i_indices for j in self.z_j_indices]
     @property
     def qubit_indices(self):
         return [(i,j) for j in range(0, self.L) for i in range((j+1)%2, self.L, 2)]
@@ -67,10 +78,10 @@ class ToricLattice:
                 1 - for an X plaquette (as they detect z errors)
                 2 - for a Z plaquette
         """
-        i_even, j_even = i%2, j%2
-        if i_even and j_even:
+        i_mod2, j_mod2 = i%2, j%2
+        if i_mod2==0 and j_mod2==0:
             return 1
-        elif not i_even and not j_even:
+        elif i_mod2==1 and j_mod2==1:
             return 2
         else:
             return 0
@@ -79,54 +90,96 @@ class ToricLattice:
     # ========
 
     def n_errors(self):
-        return np.sum(self.array[zip(*self.qubit_indices)])
+        # cast as an int, otherwise it returns a uint8, which
+        # leads to all types of problems if you try to do 
+        # arithmetic (e.g. 113-115 = 383498534198239348)
+        return int(np.sum(self.array[zip(*self.qubit_indices)]))
 
     def logical_error(self):
         return 'X' if self.has_logical_x_error() else 'None'
+    """ 
+    Measure_vert_z detects any logical vertical z errors, by measuring for zs along a vertical z row.
+    Apply_vert_z applies a vertical z error, by flipping along a horizontal x row
+    
+    X 1 X 1 X 1     <-- this is a vertical Z error
+    . Z . Z . Z         it can't be seen by the Xs
+    X . X . X .
+    . Z . Z . Z
+    X . X . X .
+    . Z . Z . Z
+    
+    """
+    def measure_vert_z_loop(s, m = None):
+        m = m or s.matching
+        error_sum = 0
+        # Z-measure the 1s along a Z-col
+        j = s.z_j_indices[0]
+        for i in s.x_i_indices:
+            n = s.array[i, j]^m[i,j]
+            error_sum = error_sum ^ n
+        return error_sum & 1 == 1
+    def measure_vert_x_loop(s, m = None):
+        m = m or s.matching
+        error_sum = 0
+        # X-measure the 2s along a X-col
+        j = s.x_j_indices[0]
+        for i in s.z_i_indices:
+            n = s.array[i, j]^m[i,j]
+            error_sum = error_sum ^ n
+        return error_sum & 2 == 2
+    def measure_hor_x_loop(s, m = None):
+        m = m or s.matching
+        error_sum = 0
+        # X-measure the 2s along a X-row
+        i = s.x_i_indices[0]
+        for j in s.z_j_indices:
+            n = s.array[i, j]^m[i,j]
+            error_sum = error_sum ^ n
+        return error_sum & 2 == 2
+    def measure_hor_z_loop(s, m=None):
+        m = m or s.matching
+        error_sum = 0
+        # Z-measure the 1st along a Z-row
+        i = s.z_i_indices[0]
+        for j in s.x_j_indices:
+            n = s.array[i, j]^m[i,j]
+            error_sum = error_sum ^ n
+        return error_sum & 1 == 1
 
-    def measure_hor_x(s):
-        error_sum = 0
-        # measure out the qubits along a Z column
-        j = s.z_col_indices[0]
-        for i in s.x_row_indices:
-            n = s.array[i, j]^s.matching[i,j]
-            error_sum = error_sum ^ n
-        return error_sum & 1 == 1
-    def measure_hor_z(s):
-        error_sum = 0
-        # measure out the qubits along a X column
-        j = s.x_col_indices[0]
-        for i in s.z_row_indices:
-            n = s.array[i, j]^s.matching[i,j]
-            error_sum = error_sum ^ n
-        return error_sum & 1 == 1
-    def measure_vert_x(s):
-        error_sum = 0
-        # measure out the qubits along a Z row
-        i = s.z_row_indices[0]
-        for j in s.x_row_indices:
-            n = s.array[i, j]^s.matching[i,j]
-            error_sum = error_sum ^ n
-        return error_sum & 1 == 1
-    def measure_vert_z(s):
-        error_sum = 0
-        # measure out the qubits along a X row
-        i = s.x_row_indices[0]
-        for j in s.z_row_indices:
-            n = s.array[i, j]^s.matching[i,j]
-            error_sum = error_sum ^ n
-        return error_sum & 1 == 1
-
+    def add_hor_x_loop(s):
+        # X-flip the qubits on a Z-row
+        i = s.z_i_indices[0]
+        for j in s.x_j_indices:
+            s.array[i, j] = s.array[i,j] ^ 2
+        return s
+    def add_vert_x_loop(s):
+        # X-flip the qubits on a Z-column
+        j = s.z_j_indices[0]
+        for i in s.x_i_indices:
+            s.array[i, j] = s.array[i,j] ^ 2
+        return s
+    def add_hor_z_loop(s):
+        # Z-flip the qubits on an X-row
+        i = s.x_i_indices[0]
+        for j in s.z_j_indices:
+            s.array[i, j] = s.array[i,j] ^ 1
+        return s
+    def add_vert_z_loop(s):
+        # Z-flip the qubits on an X-column
+        j = s.x_j_indices[0]
+        for i in s.z_i_indices:
+            s.array[i, j] = s.array[i,j] ^ 1
+        return s
     # Actions
     # =======
     def generate_syndrome(s):
         coords = []
         for i, j in s.x_stabiliser_indices + s.z_stabiliser_indices:
             if s.measure_stabiliser(i,j):
-                s.array[i, j] = 0
-            else:
                 s.array[i, j] = 1
                 coords.append((i,j))
+            else:
+                s.array[i, j] = 0
         return coords
 
     def generate_matching(self):
@@ -152,30 +205,6 @@ class ToricLattice:
     def measure_stabiliser(s, x, y):
         return bool(s.site_type(x,y) & reduce(np.bitwise_xor, [s.array[c] for c in s.neighbours(x,y)]))
 
-    def apply_hor_x(s):
-        # flip qubits in between a row of xs
-        j = s.z_row_indices[0]
-        for i in s.x_col_indices:
-            s.array[i, j] = s.array[i,j] ^ 1
-        return s
-    def apply_vert_x(s):
-        # flip qubits inbetween a col of xs
-        i = s.z_col_indices[0]
-        for j in s.x_row_indices:
-            s.array[i, j] = s.array[i,j] ^ 1
-        return s
-    def apply_hor_z(s):
-        # flip qubits in between a row of xs
-        j = s.x_row_indices[0]
-        for i in s.z_col_indices:
-            s.array[i, j] = s.array[i,j] ^ 1
-        return s
-    def apply_vert_z(s):
-        # flip qubits inbetween a col of xs
-        i = s.x_col_indices[0]
-        for j in s.z_row_indices:
-            s.array[i, j] = s.array[i,j] ^ 1
-        return s
 
     def copy(self):
         s = self.__class__(self.L)
@@ -217,7 +246,7 @@ class ToricLattice:
         a = self.array
         for (i,j) in self.x_stabiliser_indices:
             show_array[i,j] = 4 if a[i,j]==1 else 0
-        for (i,j) in self.x_stabiliser_indices:
+        for (i,j) in self.z_stabiliser_indices:
             show_array[i,j] = 4 if a[i,j]==1 else 1
         for (i,j) in self.qubit_indices:
             show_array[i,j] = 6 if a[i,j]==1 else 2
@@ -276,9 +305,19 @@ class UniformToricState(ToricLattice):
 
     def likelihood(self):
         n = self.n_errors()
-        N = len(self.qubit_indices)
-        p = self.p
-        return p**n * (1-p)**(N-n)
+        #N = len(self.qubit_indices)
+        p = self.p/(1-self.p)
+        return p**n #* (1-p)**(N-n)
+
+    def relative_prob(self, s2):
+        # returns p(s2)/p(self)
+        n = self.n_errors()
+        n2 = s2.n_errors()
+        x = self.p/(1-self.p)
+        diff = n2 - n
+        #print(n2, n, self.p,x, diff, x**diff )
+
+        return x**diff
 
     def generate_errors(self):
         n_qubits = len(self.qubit_indices)
