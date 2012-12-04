@@ -38,8 +38,14 @@ class ToricLattice:
         self.array = np.zeros((L,L), dtype='uint8')
         self._matching = None
         self.error_types = ['None', 'X']
-
-
+        self.x_i_indices = range(0, L, 2)
+        self.x_j_indices = range(0, L, 2)
+        self.z_i_indices = range(1, L, 2)
+        self.z_j_indices = range(1, L, 2)
+        self.x_stabiliser_indices = [(i,j) for i in self.x_i_indices for j in self.x_j_indices]
+        self.z_stabiliser_indices = [(i,j) for i in self.z_i_indices for j in self.z_j_indices]
+        self.qubit_indices = [(i,j) for j in range(0, self.L) for i in range((j+1)%2, self.L, 2)]
+        self._n_errors = None
 
 
     @property
@@ -48,28 +54,6 @@ class ToricLattice:
             self.generate_matching()
         return self._matching
 
-    @property
-    def x_i_indices(self):
-        return range(0, self.L, 2)
-    @property
-    def x_j_indices(self):
-        return range(0, self.L, 2)
-    @property
-    def z_j_indices(self):
-        return range(1, self.L, 2)
-    @property
-    def z_i_indices(self):
-        return range(1, self.L, 2)
-
-    @property
-    def x_stabiliser_indices(self):
-        return [(i,j) for i in self.x_i_indices for j in self.x_j_indices]
-    @property
-    def z_stabiliser_indices(self):
-        return [(i,j) for i in self.z_i_indices for j in self.z_j_indices]
-    @property
-    def qubit_indices(self):
-        return [(i,j) for j in range(0, self.L) for i in range((j+1)%2, self.L, 2)]
     def neighbours(self, i, j):
         return [(i-1, j), (i, j-1), ((i+1)%self.L, j), (i, (j+1)%self.L)]
     def site_type(self, i, j):
@@ -88,12 +72,14 @@ class ToricLattice:
 
     # Querying
     # ========
-
+    
     def n_errors(self):
         # cast as an int, otherwise it returns a uint8, which
         # leads to all types of problems if you try to do 
         # arithmetic (e.g. 113-115 = 383498534198239348)
-        return int(np.sum(self.array[zip(*self.qubit_indices)]))
+        if self._n_errors is None:
+            self._n_errors = int(np.sum(self.array[zip(*self.qubit_indices)]))
+        return self._n_errors
 
     def logical_error(self):
         return 'X' if self.has_logical_x_error() else 'None'
@@ -147,24 +133,28 @@ class ToricLattice:
         return error_sum & 1 == 1
 
     def add_hor_x_loop(s):
+        s._n_errors = None # reset error_count
         # X-flip the qubits on a Z-row
         i = s.z_i_indices[0]
         for j in s.x_j_indices:
             s.array[i, j] = s.array[i,j] ^ 2
         return s
     def add_vert_x_loop(s):
+        s._n_errors = None # reset error_count
         # X-flip the qubits on a Z-column
         j = s.z_j_indices[0]
         for i in s.x_i_indices:
             s.array[i, j] = s.array[i,j] ^ 2
         return s
     def add_hor_z_loop(s):
+        s._n_errors = None # reset error_count
         # Z-flip the qubits on an X-row
         i = s.x_i_indices[0]
         for j in s.z_j_indices:
             s.array[i, j] = s.array[i,j] ^ 1
         return s
     def add_vert_z_loop(s):
+        s._n_errors = None # reset error_count
         # Z-flip the qubits on an X-column
         j = s.x_j_indices[0]
         for i in s.z_i_indices:
@@ -183,6 +173,7 @@ class ToricLattice:
         return coords
 
     def generate_matching(self):
+        self._n_errors = None
         coords = self.generate_syndrome()
         m = self._matching = np.zeros(np.shape(self.array), dtype='bool')
         # find coords of x anyons
@@ -198,6 +189,7 @@ class ToricLattice:
         return m
 
     def apply_stabiliser(s, x, y):
+        s._n_errors = None # reset error_count
         for i,j in s.neighbours(x,y):
             s.array[i,j] = s.array[i,j] ^ 1
         return s
@@ -320,6 +312,7 @@ class UniformToricState(ToricLattice):
         return x**diff
 
     def generate_errors(self):
+        self._n_errors = None # reset error_count
         n_qubits = len(self.qubit_indices)
         errors = np.random.rand(n_qubits) < self.p
         self.array[zip(*self.qubit_indices)] = errors
@@ -330,6 +323,7 @@ class UniformToricState(ToricLattice):
         return s
 
     def generate_next(s):
+        s._n_errors = None # reset error_count
         # pick a random z site
         n = len(s.z_stabiliser_indices)
         r = np.random.random_integers(0, n-1)
