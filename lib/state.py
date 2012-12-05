@@ -47,7 +47,6 @@ class ToricLattice:
         self.qubit_indices = [(i,j) for j in range(0, self.L) for i in range((j+1)%2, self.L, 2)]
         self._n_errors = None
 
-
     @property
     def matching(self):
         if self._matching is None:
