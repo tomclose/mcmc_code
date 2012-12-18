@@ -57,13 +57,14 @@ class TestUniformToricState(unittest.TestCase):
     def testXError(self):
         s = UniformToricState(6, 0)
         s.array = UniformToricState.s_to_a(s1['array'])
-        self.assertFalse(s.measure_hor_x_loop())
+        self.assertFalse(s.has_hor_x())
     def testS2(self):
         s = UniformToricState(12, 0.3)
         s.array = UniformToricState.s_to_a(s2['array'])
-
         #check x syndrome generation works
         s.generate_syndrome()
+        print(s.array)
+        print(UniformToricState.s_to_a(s2['array']))
         self.assertArrayEqual(s.array, UniformToricState.s_to_a(s2['array']))
 
         # check matching works
@@ -71,7 +72,24 @@ class TestUniformToricState(unittest.TestCase):
         self.assertArrayEqual(s.matching, UniformToricState.s_to_a(s2['matching']))
 
         # check that has_logical_error works
-        self.assertTrue(s.measure_hor_x_loop)
+        self.assertTrue(s.has_hor_x)
+
+    def testSyndromeMatchingX(self):
+        s = UniformToricState(12, 0.3)
+        s.generate_just_x_errors()
+        s.reset_matching()
+        m = s.generate_x_matching()
+        s.array = s.array ^ m
+        self.assertArrayEqual([], s.generate_syndrome())
+
+    def testSyndromeMatchingZ(self):
+        s = UniformToricState(12, 0.3)
+        s.reset_matching()
+        s.generate_just_z_errors()
+        m = s.generate_z_matching()
+        s.array = s.array ^ m
+        self.assertArrayEqual([], s.generate_syndrome())
+
     def testGenerateNext(self):
         s = UniformToricState(16, 0.4)
         s.generate_errors()
@@ -82,47 +100,35 @@ class TestUniformToricState(unittest.TestCase):
             # syndrome shouldn't change
             self.assertArrayEqual(x_synd, s.generate_syndrome())
         # when apply matching it should lie in codespace
+        print(s.array)
         s.array = s.array ^ matching
+        print(s.array)
         self.assertArrayEqual([], s.generate_syndrome())
 
-    def testToN(self):
-        """ ToN should only work on arrays of 'small' dimesnion (<6?)"""
-        s = UniformToricState(6, 0.4)
-        # 0 errors should always map to 0
-        self.assertEqual(s.to_n(), 0)
-        # find stabiliser representation
-        stab_n = s.apply_stabiliser(0,0).to_n()
-        # check stabiliser rep looks sensible
-        self.assertEqual(bitsum(stab_n), 4)
-        # do commutativity consistency check
-        s.generate_errors()
-        n1 = s.to_n()^stab_n # convert then apply stab
-        n2 = s.apply_stabiliser(0,0).to_n() # apply stab then convert
-        self.assertEqual(n1, n2)
 
     def testMeasureApply(self):
         s = ToricLattice(16)
-        self.assertFalse(s.measure_hor_x_loop())
-        self.assertFalse(s.measure_vert_x_loop())
-        self.assertFalse(s.measure_hor_z_loop())
-        self.assertFalse(s.measure_vert_z_loop())
+        self.assertFalse(s.has_hor_x())
+        self.assertFalse(s.has_vert_x())
+        self.assertFalse(s.has_hor_z())
+        self.assertFalse(s.has_vert_z())
 
-        s.add_hor_x_loop()
-        self.assertTrue(s.measure_vert_x_loop())
-        s.add_hor_x_loop()
-        self.assertFalse(s.measure_vert_x_loop())
+        s.apply_hor_x()
+        self.assertTrue(s.has_hor_x())
+        s.apply_hor_x()
+        self.assertFalse(s.has_hor_x())
 
-        s.add_hor_z_loop()
-        self.assertTrue(s.measure_vert_z_loop())
-        s.add_hor_z_loop()
-        self.assertFalse(s.measure_vert_z_loop())
+        s.apply_hor_z()
+        self.assertTrue(s.has_hor_z())
+        s.apply_hor_z()
+        self.assertFalse(s.has_hor_z())
 
-        s.add_vert_x_loop()
-        self.assertTrue(s.measure_hor_x_loop())
-        s.add_vert_x_loop()
-        self.assertFalse(s.measure_hor_x_loop())
+        s.apply_vert_x()
+        self.assertTrue(s.has_vert_x())
+        s.apply_vert_x()
+        self.assertFalse(s.has_vert_x())
 
-        s.add_vert_z_loop()
-        self.assertTrue(s.measure_hor_z_loop())
-        s.add_vert_z_loop()
-        self.assertFalse(s.measure_hor_z_loop())
+        s.apply_vert_z()
+        self.assertTrue(s.has_vert_z())
+        s.apply_vert_z()
+        self.assertFalse(s.has_vert_z())

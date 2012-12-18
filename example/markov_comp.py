@@ -13,43 +13,46 @@ ccs = cc.ConjugacyClasses(st.ToricLattice(size))
 
 def go():
     s = st.UniformToricState(6, prob)
-    s.generate_errors()
-    s.generate_matching()
-    # make no error the right answer
-    if s.measure_hor_x():
-        s.apply_vert_z()
-    if s.measure_vert_x():
-        s.apply_hor_z()
-    if s.measure_hor_x() or s.measure_vert_x():
-        raise "oops something went wrong with the logical ops"
 
-    # forget the original error config
-    s.array[:] = s.matching[:]
+    #s.generate_just_z_errors()
+    m = s.generate_matching()
+    #hor_z = s.has_hor_z()
+    #vert_z = s.has_vert_z()
+
+    # forget the original error confic
+    s.array[:] = m[:]
+
+    sv = s.copy().apply_hor_z()
+    sh = s.copy().apply_vert_z()
+    shv = s.copy().apply_vert_z().apply_hor_z()
+
+    p = ch.path(s)
+    pv = ch.path(sv)
+    ph = ch.path(sh)
+    phv = ch.path(shv)
+
+    #if not hor_z and not vert_z:
+        ## identity is the right answer
+    paths = [p, pv, ph, phv]
+    #elif hor_z and not vert_z:
+        ## we have a vert_z_loop
+        #paths = [pv, p, ph, phv]
+    #elif not hor_z and vert_z:
+        ## we have a hor_z_loop
+        #paths = [ph, p, pv, phv]
+    #else:
+        #paths = [phv, p, pv, ph]
 
 
-    i, v, h, vh = ccs.lookup_hist(s.to_n())
+    i, v, h, vh = ccs.lookup_hist(cc.to_n(s))
 
     av_i = cc.ConjugacyClasses.hist_row_av_n(i, prob)
     av_v = cc.ConjugacyClasses.hist_row_av_n(v, prob)
     av_h = cc.ConjugacyClasses.hist_row_av_n(h, prob)
     av_vh = cc.ConjugacyClasses.hist_row_av_n(vh, prob)
 
-    p = ch.path(s)
-    pv = ch.path(s.copy().apply_vert_z())
-    ph = ch.path(s.copy().apply_hor_z())
-    phv = ch.path(s.copy().apply_vert_z().apply_hor_z())
-
-    paths = [p, pv, ph , phv]
-
-    def average_err(p):
-        count = 0
-        total_n = 0
-        for current, next_s, changed in p:
-            count+=1
-            total_n += current.n_errors()
-            yield total_n*1.0/count
-
-    ps = ch.path_set(*[ch.n_jumps(average_err(p), 1000) for p in paths])
+    n_steps = 1000
+    ps = ch.path_set(*[ch.n_jumps(ch.average_err(p), n_steps) for p in paths])
 
     for a in ps:
         print(av_i, av_v, av_h, av_vh)

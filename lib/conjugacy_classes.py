@@ -5,8 +5,14 @@ import matplotlib as matplotlib # wtf? it should work without this
 def bitsum(x):
     return sum(int(i) for i in bin(x)[2:])
 
-class ConjugacyClasses:
+def to_n(state):
+    # WARNING - only represents z errors
+    ans = 0
+    for i,j in state.qubit_indices:
+        ans = ans*2 + state.array[i,j]
+    return ans
 
+class ConjugacyClasses:
     """ Generates a full set of states and categorises
     them into conjugacy classes.
 
@@ -20,10 +26,10 @@ class ConjugacyClasses:
 
         s2 = s.copy()
 
-        stab_gens = [s.copy_onto(s2).apply_stabiliser(i, j).to_n() for i,j in s.x_stabiliser_indices[:-1]]
+        stab_gens = slf.stab_gens = [to_n(s.copy_onto(s2).apply_stabiliser(i, j)) for i,j in s.z_stabiliser_indices[:-1]]
 
-        z_hor = slf.z_hor = s.copy_onto(s2).apply_hor_z().to_n()
-        z_vert = slf.z_vert = s.copy_onto(s2).apply_vert_z().to_n()
+        z_hor = slf.z_hor = to_n(s.copy_onto(s2).apply_hor_z())
+        z_vert = slf.z_vert = to_n(s.copy_onto(s2).apply_vert_z())
         z_hor_vert = slf.z_hor_vert = z_hor ^ z_vert
 
         print("stab_gens found")

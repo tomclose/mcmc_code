@@ -50,7 +50,7 @@ class ToricLattice:
     @property
     def matching(self):
         if self._matching is None:
-            self.generate_matching()
+            self.reset_matching()
         return self._matching
 
     def neighbours(self, i, j):
@@ -94,7 +94,7 @@ class ToricLattice:
     . Z . Z . Z
     
     """
-    def measure_vert_z_loop(s, m = None):
+    def has_hor_z(s, m = None):
         m = m or s.matching
         error_sum = 0
         # Z-measure the 1s along a Z-col
@@ -103,7 +103,7 @@ class ToricLattice:
             n = s.array[i, j]^m[i,j]
             error_sum = error_sum ^ n
         return error_sum & 1 == 1
-    def measure_vert_x_loop(s, m = None):
+    def has_hor_x(s, m = None):
         m = m or s.matching
         error_sum = 0
         # X-measure the 2s along a X-col
@@ -112,7 +112,7 @@ class ToricLattice:
             n = s.array[i, j]^m[i,j]
             error_sum = error_sum ^ n
         return error_sum & 2 == 2
-    def measure_hor_x_loop(s, m = None):
+    def has_vert_x(s, m = None):
         m = m or s.matching
         error_sum = 0
         # X-measure the 2s along a X-row
@@ -121,7 +121,7 @@ class ToricLattice:
             n = s.array[i, j]^m[i,j]
             error_sum = error_sum ^ n
         return error_sum & 2 == 2
-    def measure_hor_z_loop(s, m=None):
+    def has_vert_z(s, m=None):
         m = m or s.matching
         error_sum = 0
         # Z-measure the 1st along a Z-row
@@ -131,28 +131,28 @@ class ToricLattice:
             error_sum = error_sum ^ n
         return error_sum & 1 == 1
 
-    def add_hor_x_loop(s):
+    def apply_hor_x(s):
         s._n_errors = None # reset error_count
         # X-flip the qubits on a Z-row
         i = s.z_i_indices[0]
         for j in s.x_j_indices:
             s.array[i, j] = s.array[i,j] ^ 2
         return s
-    def add_vert_x_loop(s):
+    def apply_vert_x(s):
         s._n_errors = None # reset error_count
         # X-flip the qubits on a Z-column
         j = s.z_j_indices[0]
         for i in s.x_i_indices:
             s.array[i, j] = s.array[i,j] ^ 2
         return s
-    def add_hor_z_loop(s):
+    def apply_hor_z(s):
         s._n_errors = None # reset error_count
         # Z-flip the qubits on an X-row
         i = s.x_i_indices[0]
         for j in s.z_j_indices:
             s.array[i, j] = s.array[i,j] ^ 1
         return s
-    def add_vert_z_loop(s):
+    def apply_vert_z(s):
         s._n_errors = None # reset error_count
         # Z-flip the qubits on an X-column
         j = s.x_j_indices[0]
@@ -162,22 +162,45 @@ class ToricLattice:
     # Actions
     # =======
     def generate_syndrome(s):
+        s.reset_syndrome()
+        xs = s.generate_x_syndrome()
+        zs = s.generate_z_syndrome()
+        return xs + zs
+
+    def reset_syndrome(s):
+        s.array[zip(*s.z_stabiliser_indices)] = 0
+        s.array[zip(*s.x_stabiliser_indices)] = 0
+
+    def generate_z_syndrome(s):
         coords = []
-        for i, j in s.x_stabiliser_indices + s.z_stabiliser_indices:
+        for i, j in s.x_stabiliser_indices:
             if s.measure_stabiliser(i,j):
-                s.array[i, j] = 1
+                s.array[i, j] = s.array[i,j] ^ 1
                 coords.append((i,j))
-            else:
-                s.array[i, j] = 0
+        return coords
+
+    def generate_x_syndrome(s):
+        coords = []
+        for i, j in s.z_stabiliser_indices:
+            if s.measure_stabiliser(i,j):
+                s.array[i, j] = s.array[i,j] ^ 1
+                coords.append((i,j))
         return coords
 
     def generate_matching(self):
+        self.reset_matching()
+        self.generate_z_matching()
+        self.generate_x_matching()
+        return self._matching
+        
+    def reset_matching(self):
         self._n_errors = None
-        coords = self.generate_syndrome()
-        m = self._matching = np.zeros(np.shape(self.array), dtype='bool')
-        # find coords of x anyons
-        # for each one Z flip the qubits required to 
-        # connect it to (0,0)
+        self._matching = np.zeros(np.shape(self.array), dtype='uint8')
+
+    def generate_z_matching(self):
+        m = self._matching
+        self.generate_z_syndrome() # do twice so don't change state *yuk*
+        coords = self.generate_z_syndrome()
         for I, J in coords:
             # Z flip first row up to I
             for i in range(1, I+1, 2): #know first qubit is at 1
@@ -187,6 +210,18 @@ class ToricLattice:
                 m[I, j] = m[I, j] ^ 1
         return m
 
+    def generate_x_matching(self):
+        m = self._matching
+        self.generate_x_syndrome() # do twice to avoid state change ** yuk **
+        coords = self.generate_x_syndrome()
+        for I, J in coords: #I, J will be odd
+            # X flip second row up to I
+            for i in range(2, I, 2): #know first qubit is at 1
+                m[i, 1] = m[i, 1] ^ 2
+            # Z flip Ith column up to J
+            for j in range(2, J, 2):
+                m[I, j] = m[I, j] ^ 2
+        return m
     def apply_stabiliser(s, x, y):
         s._n_errors = None # reset error_count
         for i,j in s.neighbours(x,y):
@@ -216,12 +251,6 @@ class ToricLattice:
     def dump_s(self):
         return __class__.a_to_s(self.array)
 
-    def to_n(self):
-        # WARNING - only represents x errors
-        ans = 0
-        for i,j in self.qubit_indices:
-            ans = ans*2 + self.array[i,j]
-        return ans
 
     def show(self):
         fig = plt.gcf()# or plt.figure()
@@ -240,10 +269,17 @@ class ToricLattice:
         for (i,j) in self.z_stabiliser_indices:
             show_array[i,j] = 4 if a[i,j]==1 else 1
         for (i,j) in self.qubit_indices:
-            show_array[i,j] = 6 if a[i,j]==1 else 2
-        cax = ax.imshow(show_array, interpolation='nearest', vmax=6)
-        cbar = plt.colorbar(cax, ticks=[0, 1, 2, 4, 6])
-        cbar.ax.set_yticklabels(['X stab', 'Z stab','qubit', 'firing X stab', 'error qubit'])
+            if a[i,j] ==1:
+                show_array[i,j] = 6
+            elif a[i,j] ==2:
+                show_array[i,j] = 7
+            elif a[i,j] ==3:
+                show_array[i,j] = 8
+            else:
+                show_array[i,j] = 2
+        cax = ax.imshow(show_array, interpolation='nearest', vmax=8)
+        cbar = plt.colorbar(cax, ticks=[0, 1, 2, 4, 6, 7, 8])
+        cbar.ax.set_yticklabels(['X stab', 'Z stab','qubit', 'firing X stab', 'Z error qubit',  'X error qubit',  'Y error qubit'])
         for x, y in np.argwhere(self.matching > 0):
             circ = plt.Circle((y, x), radius = 0.3)
             # it seems that matplotlib transposes the coords
@@ -310,11 +346,32 @@ class UniformToricState(ToricLattice):
 
         return x**diff
 
-    def generate_errors(self):
+    def generate_just_z_errors(self):
         self._n_errors = None # reset error_count
         n_qubits = len(self.qubit_indices)
         errors = np.random.rand(n_qubits) < self.p
         self.array[zip(*self.qubit_indices)] = errors
+
+    def generate_just_x_errors(self):
+        self._n_errors = None # reset error_count
+        n_qubits = len(self.qubit_indices)
+        errors = np.random.rand(n_qubits) < self.p
+        self.array[zip(*self.qubit_indices)] = 2*errors
+
+    def generate_errors(self):
+        self._n_errors = None # reset error_count
+        n_qubits = len(self.qubit_indices)
+        r = np.random.rand(n_qubits)
+        def map_to_error(x):
+            if x < self.p/3:
+                return 3
+            elif x < 2*self.p/3:
+                return 2
+            elif x < self.p:
+                return 1
+            else:
+                return 0
+        self.array[zip(*self.qubit_indices)] = [map_to_error(x) for x in r]
 
     def copy(self):
         s = self.__class__(self.L, self.p)
