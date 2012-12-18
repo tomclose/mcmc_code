@@ -50,4 +50,4 @@ def average_err(p):
         n_changes += changed
         count+=1
         total_n += current.n_errors()
-        yield (total_n, n_changes)
+        yield (total_n, n_changes, count)

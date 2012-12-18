@@ -76,8 +76,8 @@ class ToricLattice:
         # cast as an int, otherwise it returns a uint8, which
         # leads to all types of problems if you try to do 
         # arithmetic (e.g. 113-115 = 383498534198239348)
-        if self._n_errors is None:
-            self._n_errors = int(np.sum(self.array[zip(*self.qubit_indices)]))
+        #if self._n_errors is None:
+        self._n_errors = int(np.sum(self.array[zip(*self.qubit_indices)]))
         return self._n_errors
 
     def logical_error(self):

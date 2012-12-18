@@ -6,12 +6,11 @@ import state as st
 import chain as ch
 import conjugacy_classes as cc
 
-prob = 0.1
 size = 6
 
 ccs = cc.ConjugacyClasses(st.ToricLattice(size))
 
-def go():
+def go(prob):
     s = st.UniformToricState(6, prob)
 
     #s.generate_just_z_errors()
@@ -56,4 +55,4 @@ def go():
 
     for a in ps:
         print(av_i, av_v, av_h, av_vh)
-        print(a)
+        print([b[0]*1.0/b[2] for b in a])
