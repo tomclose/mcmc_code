@@ -7,30 +7,31 @@ import chain as ch
 
 def run_trials(size=6, prob=0.1, n_steps = 5000, n_trials = 1000):
     successes = failures = 0
-    s = st.UniformToricState(size, prob)
 
     for i in range(n_trials):
-        s.generate_errors()
+        s = st.UniformToricState(size, prob)
+
+        s.generate_just_z_errors()
         m = s.generate_matching()
-        hor_z = s.measure_hor_z_loop()
-        vert_z = s.measure_vert_z_loop()
+        hor_z = s.has_hor_z()
+        vert_z = s.has_vert_z()
 
         # forget the original error confic
         s.array[:] = m[:]
 
         p = ch.path(s)
-        pv = ch.path(s.copy().add_hor_z_loop())
-        ph = ch.path(s.copy().add_vert_z_loop())
-        phv = ch.path(s.copy().add_vert_z_loop().add_hor_z_loop())
+        pv = ch.path(s.copy().apply_hor_z())
+        ph = ch.path(s.copy().apply_vert_z())
+        phv = ch.path(s.copy().apply_vert_z().apply_hor_z())
 
         if not hor_z and not vert_z:
             # identity is the right answer
             paths = [p, pv, ph, phv]
         elif hor_z and not vert_z:
-            # we have a vert_z_loop
+            # we have a vert_z
             paths = [pv, p, ph, phv]
         elif not hor_z and vert_z:
-            # we have a hor_z_loop
+            # we have a hor_z
             paths = [ph, p, pv, phv]
         else:
             paths = [phv, p, pv, ph]
@@ -41,7 +42,7 @@ def run_trials(size=6, prob=0.1, n_steps = 5000, n_trials = 1000):
         # over the second half of the chain
         ps.next()
         res = ps.next()
-        totals = [n for (n, prop) in res]
+        totals = [n for (n, prop, count) in res]
         if np.argmin(totals) == 0:
             successes +=1
             print("success")
