@@ -35,9 +35,8 @@ class ToricLattice:
     """
     def __init__(self, L):
         self.L = L
-        self.array = np.zeros((L,L), dtype='uint8')
+        self._array = np.zeros((L,L), dtype='uint8')
         self._matching = None
-        self.error_types = ['None', 'X']
         self.x_i_indices = range(0, L, 2)
         self.x_j_indices = range(0, L, 2)
         self.z_i_indices = range(1, L, 2)
@@ -46,6 +45,19 @@ class ToricLattice:
         self.z_stabiliser_indices = [(i,j) for i in self.z_i_indices for j in self.z_j_indices]
         self.qubit_indices = [(i,j) for j in range(0, self.L) for i in range((j+1)%2, self.L, 2)]
         self._n_errors = None
+
+    def flip_qubit(self, i, j, flip_type='Z'):
+        val = self._array[i,j]
+        if flip_type == 'Z':
+            new_val = val ^ 1
+        elif flip_type == 'X':
+            new_val = val ^ 2
+        elif flip_type == 'Y':
+            new_val = val ^ 3
+        else:
+            raise RuntimeError("Invalid flip_type: ", flip_type)
+        self._array[i,j] = new_val
+
 
     @property
     def matching(self):
@@ -77,11 +89,9 @@ class ToricLattice:
         # leads to all types of problems if you try to do 
         # arithmetic (e.g. 113-115 = 383498534198239348)
         #if self._n_errors is None:
-        self._n_errors = int(np.sum(self.array[zip(*self.qubit_indices)]))
+        self._n_errors = int(np.sum(self._array[zip(*self.qubit_indices)]))
         return self._n_errors
 
-    def logical_error(self):
-        return 'X' if self.has_logical_x_error() else 'None'
     """ 
     Measure_vert_z detects any logical vertical z errors, by measuring for zs along a vertical z row.
     Apply_vert_z applies a vertical z error, by flipping along a horizontal x row
@@ -100,7 +110,7 @@ class ToricLattice:
         # Z-measure the 1s along a Z-col
         j = s.z_j_indices[0]
         for i in s.x_i_indices:
-            n = s.array[i, j]^m[i,j]
+            n = s._array[i, j]^m[i,j]
             error_sum = error_sum ^ n
         return error_sum & 1 == 1
     def has_hor_x(s, m = None):
@@ -109,7 +119,7 @@ class ToricLattice:
         # X-measure the 2s along a X-col
         j = s.x_j_indices[0]
         for i in s.z_i_indices:
-            n = s.array[i, j]^m[i,j]
+            n = s._array[i, j]^m[i,j]
             error_sum = error_sum ^ n
         return error_sum & 2 == 2
     def has_vert_x(s, m = None):
@@ -118,7 +128,7 @@ class ToricLattice:
         # X-measure the 2s along a X-row
         i = s.x_i_indices[0]
         for j in s.z_j_indices:
-            n = s.array[i, j]^m[i,j]
+            n = s._array[i, j]^m[i,j]
             error_sum = error_sum ^ n
         return error_sum & 2 == 2
     def has_vert_z(s, m=None):
@@ -127,7 +137,7 @@ class ToricLattice:
         # Z-measure the 1st along a Z-row
         i = s.z_i_indices[0]
         for j in s.x_j_indices:
-            n = s.array[i, j]^m[i,j]
+            n = s._array[i, j]^m[i,j]
             error_sum = error_sum ^ n
         return error_sum & 1 == 1
 
@@ -136,28 +146,28 @@ class ToricLattice:
         # X-flip the qubits on a Z-row
         i = s.z_i_indices[0]
         for j in s.x_j_indices:
-            s.array[i, j] = s.array[i,j] ^ 2
+            s.flip_qubit(i, j, 'X')
         return s
     def apply_vert_x(s):
         s._n_errors = None # reset error_count
         # X-flip the qubits on a Z-column
         j = s.z_j_indices[0]
         for i in s.x_i_indices:
-            s.array[i, j] = s.array[i,j] ^ 2
+            s.flip_qubit(i, j, 'X')
         return s
     def apply_hor_z(s):
         s._n_errors = None # reset error_count
         # Z-flip the qubits on an X-row
         i = s.x_i_indices[0]
         for j in s.z_j_indices:
-            s.array[i, j] = s.array[i,j] ^ 1
+            s.flip_qubit(i, j, 'Z')
         return s
     def apply_vert_z(s):
         s._n_errors = None # reset error_count
         # Z-flip the qubits on an X-column
         j = s.x_j_indices[0]
         for i in s.z_i_indices:
-            s.array[i, j] = s.array[i,j] ^ 1
+            s.flip_qubit(i, j, 'Z')
         return s
     # Actions
     # =======
@@ -168,23 +178,27 @@ class ToricLattice:
         return xs + zs
 
     def reset_syndrome(s):
-        s.array[zip(*s.z_stabiliser_indices)] = 0
-        s.array[zip(*s.x_stabiliser_indices)] = 0
+        s._array[zip(*s.z_stabiliser_indices)] = 0
+        s._array[zip(*s.x_stabiliser_indices)] = 0
 
     def generate_z_syndrome(s):
         coords = []
         for i, j in s.x_stabiliser_indices:
             if s.measure_stabiliser(i,j):
-                s.array[i, j] = s.array[i,j] ^ 1
+                s._array[i, j] = 1
                 coords.append((i,j))
+            else:
+                s._array[i,j] = 0
         return coords
 
     def generate_x_syndrome(s):
         coords = []
         for i, j in s.z_stabiliser_indices:
             if s.measure_stabiliser(i,j):
-                s.array[i, j] = s.array[i,j] ^ 1
+                s._array[i, j] = 1
                 coords.append((i,j))
+            else:
+                s._array[i,j] = 0
         return coords
 
     def generate_matching(self):
@@ -195,7 +209,7 @@ class ToricLattice:
         
     def reset_matching(self):
         self._n_errors = None
-        self._matching = np.zeros(np.shape(self.array), dtype='uint8')
+        self._matching = np.zeros(np.shape(self._array), dtype='uint8')
 
     def generate_z_matching(self):
         m = self._matching
@@ -223,13 +237,22 @@ class ToricLattice:
                 m[I, j] = m[I, j] ^ 2
         return m
     def apply_stabiliser(s, x, y):
-        s._n_errors = None # reset error_count
+        site_type = s.site_type(x, y)
+
+        if site_type == 1:   # X plaquette
+            flip_type = 'Z'
+        elif site_type == 2: # Z plaquette
+            flip_type = 'X'
+        else:                # a qubit
+            raise RuntimeError("Not a stabiliser site", x, y)
+
         for i,j in s.neighbours(x,y):
-            s.array[i,j] = s.array[i,j] ^ 1
+            s.flip_qubit(i,j, flip_type)
+
         return s
 
     def measure_stabiliser(s, x, y):
-        return bool(s.site_type(x,y) & reduce(np.bitwise_xor, [s.array[c] for c in s.neighbours(x,y)]))
+        return bool(s.site_type(x,y) & reduce(np.bitwise_xor, [s._array[c] for c in s.neighbours(x,y)]))
 
 
     def copy(self):
@@ -238,7 +261,7 @@ class ToricLattice:
         return s
 
     def copy_onto(self, other_state):
-        other_state.array = self.array.copy()
+        other_state._array = self._array.copy()
         # note that matching is NOT copied - it's a reference
         # this is fine - each time we call generate_matching()
         #                a new one is created
@@ -249,7 +272,7 @@ class ToricLattice:
     # Displaying
     # ==========
     def dump_s(self):
-        return __class__.a_to_s(self.array)
+        return __class__.a_to_s(self._array)
 
 
     def show(self):
@@ -263,7 +286,7 @@ class ToricLattice:
         #  - 6 is an error qubit
         #  - 4 is a firing stabiliser
         show_array = np.zeros((self.L, self.L), dtype='int')
-        a = self.array
+        a = self._array
         for (i,j) in self.x_stabiliser_indices:
             show_array[i,j] = 4 if a[i,j]==1 else 0
         for (i,j) in self.z_stabiliser_indices:
@@ -350,13 +373,13 @@ class UniformToricState(ToricLattice):
         self._n_errors = None # reset error_count
         n_qubits = len(self.qubit_indices)
         errors = np.random.rand(n_qubits) < self.p
-        self.array[zip(*self.qubit_indices)] = errors
+        self._array[zip(*self.qubit_indices)] = errors
 
     def generate_just_x_errors(self):
         self._n_errors = None # reset error_count
         n_qubits = len(self.qubit_indices)
         errors = np.random.rand(n_qubits) < self.p
-        self.array[zip(*self.qubit_indices)] = 2*errors
+        self._array[zip(*self.qubit_indices)] = 2*errors
 
     def generate_errors(self):
         self._n_errors = None # reset error_count
@@ -371,7 +394,7 @@ class UniformToricState(ToricLattice):
                 return 1
             else:
                 return 0
-        self.array[zip(*self.qubit_indices)] = [map_to_error(x) for x in r]
+        self._array[zip(*self.qubit_indices)] = [map_to_error(x) for x in r]
 
     def copy(self):
         s = self.__class__(self.L, self.p)
@@ -399,7 +422,7 @@ class HotState(ToricLattice):
             # by flipping a z row
             for j in range(1, s.L, 2):
                 i = 0
-                s.array[i, j] = s.array[i,j] ^ 1
+                s._array[i, j] = s._array[i,j] ^ 1
         # pick a random z site
         for x, y in s.z_stabiliser_indices:
             if np.random.rand() < 0.5:

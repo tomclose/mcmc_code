@@ -37,7 +37,7 @@ def run_trials(size=6, prob=0.1, n_steps = 5000, n_trials = 1000):
             paths = [phv, p, pv, ph]
 
         ps = ch.path_set(*[ch.n_jumps(ch.average_err(p), n_steps/2) for p in paths])
-        
+
         # take two steps, so that the average is found
         # over the second half of the chain
         ps.next()

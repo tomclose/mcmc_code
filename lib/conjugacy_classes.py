@@ -9,7 +9,7 @@ def to_n(state):
     # WARNING - only represents z errors
     ans = 0
     for i,j in state.qubit_indices:
-        ans = ans*2 + state.array[i,j]
+        ans = ans*2 + state._array[i,j]
     return ans
 
 class ConjugacyClasses:
