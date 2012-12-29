@@ -36,7 +36,6 @@ class ToricLattice:
     def __init__(self, L):
         self.L = L
         self._array = np.zeros((L,L), dtype='uint8')
-        self._matching = None
         self.x_i_indices = range(0, L, 2)
         self.x_j_indices = range(0, L, 2)
         self.z_i_indices = range(1, L, 2)
@@ -44,29 +43,57 @@ class ToricLattice:
         self.x_stabiliser_indices = [(i,j) for i in self.x_i_indices for j in self.x_j_indices]
         self.z_stabiliser_indices = [(i,j) for i in self.z_i_indices for j in self.z_j_indices]
         self.qubit_indices = [(i,j) for j in range(0, self.L) for i in range((j+1)%2, self.L, 2)]
+        self.stabiliser_indices = [(i,j) for j in range(0, self.L) for i in range(j%2, self.L, 2)]
         self._n_errors = None
+        self._syndrome = None
 
-    def flip_qubit(self, i, j, flip_type='Z'):
+    def flip_qubit(self, i, j, flip_type='z'):
         val = self._array[i,j]
-        if flip_type == 'Z':
+        if flip_type == 'z' or flip_type == 1:
             new_val = val ^ 1
-        elif flip_type == 'X':
+        elif flip_type == 'x' or flip_type == 2:
             new_val = val ^ 2
-        elif flip_type == 'Y':
+        elif flip_type == 'y' or flip_type == 3:
             new_val = val ^ 3
+        elif flip_type == 0:
+            # do nothing
+            new_val = val
         else:
             raise RuntimeError("Invalid flip_type: ", flip_type)
         self._array[i,j] = new_val
 
+    def qubit(self, i, j):
+        return self._array[i,j]
 
-    @property
-    def matching(self):
-        if self._matching is None:
-            self.reset_matching()
-        return self._matching
+    def qubit_line(self, direction, inbetween):
+        return self._array[zip(*self.qubit_line_ij(direction, inbetween))]
+
+    def qubit_line_ij(self, direction, inbetween):
+        """ Usage:
+                qubit_line_ij('row', inbetween='x')
+        """
+        if direction == 'row':
+            if inbetween == 'z':
+                qs = [(i, self.z_j_indices[0]) for i in self.x_i_indices]
+            elif inbetween == 'x':
+                qs = [(i, self.x_j_indices[0]) for i in self.z_i_indices]
+            else:
+                raise RuntimeError("Inbetween must be 'x' or 'z'", inbetween)
+        elif direction == 'col':
+            if inbetween == 'z':
+                qs = [(self.z_i_indices[0], j) for j in self.x_j_indices]
+            elif inbetween == 'x':
+                qs = [(self.x_i_indices[0], j) for j in self.z_j_indices]
+            else:
+                raise RuntimeError("Inbetween must be 'x' or 'z'", inbetween)
+        else:
+            raise RuntimeError("Invalid direction (should be 'row' or 'col')", direction)
+        return qs
+
 
     def neighbours(self, i, j):
         return [(i-1, j), (i, j-1), ((i+1)%self.L, j), (i, (j+1)%self.L)]
+
     def site_type(self, i, j):
         """ Returns:
                 0 - for a qubit
@@ -83,7 +110,6 @@ class ToricLattice:
 
     # Querying
     # ========
-    
     def n_errors(self):
         # cast as an int, otherwise it returns a uint8, which
         # leads to all types of problems if you try to do 
@@ -92,163 +118,29 @@ class ToricLattice:
         self._n_errors = int(np.sum(self._array[zip(*self.qubit_indices)]))
         return self._n_errors
 
-    """ 
-    Measure_vert_z detects any logical vertical z errors, by measuring for zs along a vertical z row.
-    Apply_vert_z applies a vertical z error, by flipping along a horizontal x row
-    
-    X 1 X 1 X 1     <-- this is a vertical Z error
-    . Z . Z . Z         it can't be seen by the Xs
-    X . X . X .
-    . Z . Z . Z
-    X . X . X .
-    . Z . Z . Z
-    
-    """
-    def has_hor_z(s, m = None):
-        m = m or s.matching
-        error_sum = 0
-        # Z-measure the 1s along a Z-col
-        j = s.z_j_indices[0]
-        for i in s.x_i_indices:
-            n = s._array[i, j]^m[i,j]
-            error_sum = error_sum ^ n
-        return error_sum & 1 == 1
-    def has_hor_x(s, m = None):
-        m = m or s.matching
-        error_sum = 0
-        # X-measure the 2s along a X-col
-        j = s.x_j_indices[0]
-        for i in s.z_i_indices:
-            n = s._array[i, j]^m[i,j]
-            error_sum = error_sum ^ n
-        return error_sum & 2 == 2
-    def has_vert_x(s, m = None):
-        m = m or s.matching
-        error_sum = 0
-        # X-measure the 2s along a X-row
-        i = s.x_i_indices[0]
-        for j in s.z_j_indices:
-            n = s._array[i, j]^m[i,j]
-            error_sum = error_sum ^ n
-        return error_sum & 2 == 2
-    def has_vert_z(s, m=None):
-        m = m or s.matching
-        error_sum = 0
-        # Z-measure the 1st along a Z-row
-        i = s.z_i_indices[0]
-        for j in s.x_j_indices:
-            n = s._array[i, j]^m[i,j]
-            error_sum = error_sum ^ n
-        return error_sum & 1 == 1
 
-    def apply_hor_x(s):
-        s._n_errors = None # reset error_count
-        # X-flip the qubits on a Z-row
-        i = s.z_i_indices[0]
-        for j in s.x_j_indices:
-            s.flip_qubit(i, j, 'X')
-        return s
-    def apply_vert_x(s):
-        s._n_errors = None # reset error_count
-        # X-flip the qubits on a Z-column
-        j = s.z_j_indices[0]
-        for i in s.x_i_indices:
-            s.flip_qubit(i, j, 'X')
-        return s
-    def apply_hor_z(s):
-        s._n_errors = None # reset error_count
-        # Z-flip the qubits on an X-row
-        i = s.x_i_indices[0]
-        for j in s.z_j_indices:
-            s.flip_qubit(i, j, 'Z')
-        return s
-    def apply_vert_z(s):
-        s._n_errors = None # reset error_count
-        # Z-flip the qubits on an X-column
-        j = s.x_j_indices[0]
-        for i in s.z_i_indices:
-            s.flip_qubit(i, j, 'Z')
-        return s
     # Actions
     # =======
-    def generate_syndrome(s):
-        s.reset_syndrome()
-        xs = s.generate_x_syndrome()
-        zs = s.generate_z_syndrome()
-        return xs + zs
+    def syndrome(s, refresh=False):
+        if s._syndrome is None or refresh:
+            coords = []
+            for i,j in s.stabiliser_indices:
+                if s.measure_stabiliser(i,j):
+                    s._array[i,j] = 1
+                    coords.append((i,j))
+                else:
+                    s._array[i,j] = 0
+            s._syndrome = coords
+        return s._syndrome
 
-    def reset_syndrome(s):
-        s._array[zip(*s.z_stabiliser_indices)] = 0
-        s._array[zip(*s.x_stabiliser_indices)] = 0
-
-    def generate_z_syndrome(s):
-        coords = []
-        for i, j in s.x_stabiliser_indices:
-            if s.measure_stabiliser(i,j):
-                s._array[i, j] = 1
-                coords.append((i,j))
-            else:
-                s._array[i,j] = 0
-        return coords
-
-    def generate_x_syndrome(s):
-        coords = []
-        for i, j in s.z_stabiliser_indices:
-            if s.measure_stabiliser(i,j):
-                s._array[i, j] = 1
-                coords.append((i,j))
-            else:
-                s._array[i,j] = 0
-        return coords
-
-    def generate_matching(self):
-        self.reset_matching()
-        self.generate_z_matching()
-        self.generate_x_matching()
-        return self._matching
-        
-    def reset_matching(self):
-        self._n_errors = None
-        self._matching = np.zeros(np.shape(self._array), dtype='uint8')
-
-    def generate_z_matching(self):
-        m = self._matching
-        self.generate_z_syndrome() # do twice so don't change state *yuk*
-        coords = self.generate_z_syndrome()
-        for I, J in coords:
-            # Z flip first row up to I
-            for i in range(1, I+1, 2): #know first qubit is at 1
-                m[i, 0] = m[i, 0] ^ 1
-            # Z flip Ith column up to J
-            for j in range((I+1)%2, J+1, 2):
-                m[I, j] = m[I, j] ^ 1
-        return m
-
-    def generate_x_matching(self):
-        m = self._matching
-        self.generate_x_syndrome() # do twice to avoid state change ** yuk **
-        coords = self.generate_x_syndrome()
-        for I, J in coords: #I, J will be odd
-            # X flip second row up to I
-            for i in range(2, I, 2): #know first qubit is at 1
-                m[i, 1] = m[i, 1] ^ 2
-            # Z flip Ith column up to J
-            for j in range(2, J, 2):
-                m[I, j] = m[I, j] ^ 2
-        return m
     def apply_stabiliser(s, x, y):
         site_type = s.site_type(x, y)
-
-        if site_type == 1:   # X plaquette
-            flip_type = 'Z'
-        elif site_type == 2: # Z plaquette
-            flip_type = 'X'
-        else:                # a qubit
-            raise RuntimeError("Not a stabiliser site", x, y)
-
+        # site_type = 1 for an X stabiliser site,
+        #             2 for a Z
+        #             0 for qubit
+        # NB passing in a qubit site will silently have no effect
         for i,j in s.neighbours(x,y):
-            s.flip_qubit(i,j, flip_type)
-
+            s.flip_qubit(i,j, site_type)
         return s
 
     def measure_stabiliser(s, x, y):
@@ -262,12 +154,71 @@ class ToricLattice:
 
     def copy_onto(self, other_state):
         other_state._array = self._array.copy()
-        # note that matching is NOT copied - it's a reference
-        # this is fine - each time we call generate_matching()
-        #                a new one is created
-        other_state.matching = self.matching
         return other_state
 
+    def change_class(s, change):
+        if change & 1:
+            for i, j in s.qubit_line_ij('col', inbetween='z'):
+                s.flip_qubit(i, j, 'x')
+        if change & 2:
+            for i, j in s.qubit_line_ij('col', inbetween='x'):
+                s.flip_qubit(i, j, 'z')
+        if change & 4:
+            for i, j in s.qubit_line_ij('row', inbetween='z'):
+                s.flip_qubit(i, j, 'x')
+        if change & 8:
+            for i, j in s.qubit_line_ij('row', inbetween='x'):
+                s.flip_qubit(i, j, 'z')
+        return s
+
+    @staticmethod
+    def multiply(s1, s2):
+        s = s1.copy()
+        for i,j in s.qubit_indices:
+            s.flip_qubit(i, j, s2.qubit(i,j))
+        return s
+
+    @classmethod
+    def compare(cls, s1, s2):
+        """ Returns the number of the syndrome 
+            xHor zHor xVert zVert
+            i.e 4 = zHor
+                5 = zHor, zVert
+                15 = zHor, zVert, xHor, xVert
+        """
+        s = cls.multiply(s1, s2) # is self the class here
+        result = 0
+        result += 1 if reduce(lambda v, q: q^v, s.qubit_line('row', inbetween='x')) & 2 else 0
+        result += 2 if reduce(lambda v, q: q^v, s.qubit_line('row', inbetween='z')) & 1 else 0
+        result += 4 if reduce(lambda v, q: q^v, s.qubit_line('col', inbetween='x')) & 2 else 0
+        result += 8 if reduce(lambda v, q: q^v, s.qubit_line('col', inbetween='z')) & 1 else 0
+        return result
+    """ 
+    Measure_vert_z detects any logical vertical z errors, by measuring for zs along a vertical z row.
+    Apply_vert_z applies a vertical z error, by flipping along a horizontal x row
+
+    X 1 X 1 X 1     <-- this is a vertical Z error
+    . Z . Z . Z         it can't be seen by the Xs
+    X . X . X .
+    . Z . Z . Z
+    X . X . X .
+    . Z . Z . Z
+
+    """
+
+    @classmethod
+    def from_syndrome(cls, L, syndrome):
+        s = cls(L)
+        for i, j in syndrome:
+            flip_type = s.site_type(i, j) # 1 for X, 2 for Z
+            while(i > 1): # move to the left
+                # jump a qubit an flip it
+                s.flip_qubit(i-1, j, flip_type)
+                i -= 2
+            while(j > 1): # move to the top
+                # jump a qubit and flip it
+                s.flip_qubit(i, j-1, flip_type)
+        return s
 
     # Displaying
     # ==========
@@ -303,15 +254,15 @@ class ToricLattice:
         cax = ax.imshow(show_array, interpolation='nearest', vmax=8)
         cbar = plt.colorbar(cax, ticks=[0, 1, 2, 4, 6, 7, 8])
         cbar.ax.set_yticklabels(['X stab', 'Z stab','qubit', 'firing X stab', 'Z error qubit',  'X error qubit',  'Y error qubit'])
-        for x, y in np.argwhere(self.matching > 0):
-            circ = plt.Circle((y, x), radius = 0.3)
+        #for x, y in np.argwhere(self.matching > 0):
+            #circ = plt.Circle((y, x), radius = 0.3)
             # it seems that matplotlib transposes the coords
             # of an imshow such that the coords where 
             # a[i,j] are shown are actually (j, i)
             # this makes sense, as for arrays j corresponds
             # to horizontal movement, whereas the convention
             # for graph coords is (x=horiz, y=vert)
-            ax.add_patch(circ)
+            #ax.add_patch(circ)
         plt.show() # in case not already drawn
         plt.draw() # refresh if drawn
         return show_array
@@ -346,6 +297,8 @@ class ToricLattice:
             else : #elt == 'Y'
                 return 3
         return np.array([[t(elt) for elt in s.split(" ")] for s in string.strip().split('\n')])
+
+
 
 
 class UniformToricState(ToricLattice):

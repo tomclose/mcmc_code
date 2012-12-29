@@ -43,6 +43,14 @@ Z . . . . . . . . . . .
 class TestUniformToricState(unittest.TestCase):
     def assertArrayEqual(self, a, b):
         self.assertTrue(np.array_equal(a,b))
+
+    def testQubits(self):
+        s = ToricLattice(6)
+        x = s.qubit_line('row', inbetween='z')
+        self.assertArrayEqual(x, [0,0,0])
+    def testMultiply(self):
+        pass
+
     def testGenerateErrors(self):
         s = UniformToricState(6, 0)
         s.generate_errors()
@@ -50,7 +58,7 @@ class TestUniformToricState(unittest.TestCase):
     def testToStringAndBack(self):
         s = UniformToricState(6, 0.5)
         s.generate_errors()
-        s.generate_syndrome()
+        s.syndrome()
         string = UniformToricState.a_to_s(s._array)
         a2 = UniformToricState.s_to_a(string)
         self.assertTrue(np.array_equal(s._array, a2))
@@ -62,7 +70,7 @@ class TestUniformToricState(unittest.TestCase):
         s = UniformToricState(12, 0.3)
         s.array = UniformToricState.s_to_a(s2['array'])
         #check x syndrome generation works
-        s.generate_syndrome()
+        s.syndrome()
         print(s.array)
         print(UniformToricState.s_to_a(s2['array']))
         self.assertArrayEqual(s._array, UniformToricState.s_to_a(s2['array']))
@@ -80,7 +88,7 @@ class TestUniformToricState(unittest.TestCase):
         s.reset_matching()
         m = s.generate_x_matching()
         s._array = s._array ^ m
-        self.assertArrayEqual([], s.generate_syndrome())
+        self.assertArrayEqual([], s.syndrome())
 
     def testSyndromeMatchingZ(self):
         s = UniformToricState(12, 0.3)
@@ -88,47 +96,45 @@ class TestUniformToricState(unittest.TestCase):
         s.generate_just_z_errors()
         m = s.generate_z_matching()
         s._array = s._array ^ m
-        self.assertArrayEqual([], s.generate_syndrome())
+        self.assertArrayEqual([], s.syndrome())
 
     def testGenerateNext(self):
         s = UniformToricState(16, 0.4)
         s.generate_errors()
-        x_synd = s.generate_syndrome()
+        x_synd = s.syndrome()
         matching = s.generate_matching()
         for i in range(5):
             s.generate_next()
             # syndrome shouldn't change
-            self.assertArrayEqual(x_synd, s.generate_syndrome())
+            self.assertArrayEqual(x_synd, s.syndrome())
         # when apply matching it should lie in codespace
         print(s._array)
         s._array = s._array ^ matching
         print(s._array)
-        self.assertArrayEqual([], s.generate_syndrome())
+        self.assertArrayEqual([], s.syndrome())
 
 
-    def testMeasureApply(self):
+    def testCompareApply(self):
         s = ToricLattice(16)
-        self.assertFalse(s.has_hor_x())
-        self.assertFalse(s.has_vert_x())
-        self.assertFalse(s.has_hor_z())
-        self.assertFalse(s.has_vert_z())
+        s_orig = s.copy()
+        self.assertEqual(0, ToricLattice.compare(s, s_orig))
 
-        s.apply_hor_x()
-        self.assertTrue(s.has_hor_x())
-        s.apply_hor_x()
-        self.assertFalse(s.has_hor_x())
+        s.change_class(8)
+        self.assertEqual(8, ToricLattice.compare(s, s_orig))
+        s.change_class(8)
+        self.assertEqual(0, ToricLattice.compare(s, s_orig))
 
-        s.apply_hor_z()
-        self.assertTrue(s.has_hor_z())
-        s.apply_hor_z()
-        self.assertFalse(s.has_hor_z())
+        s.change_class(4)
+        self.assertEqual(4, ToricLattice.compare(s, s_orig))
+        s.change_class(4)
+        self.assertEqual(0, ToricLattice.compare(s, s_orig))
 
-        s.apply_vert_x()
-        self.assertTrue(s.has_vert_x())
-        s.apply_vert_x()
-        self.assertFalse(s.has_vert_x())
+        s.change_class(2)
+        self.assertEqual(2, ToricLattice.compare(s, s_orig))
+        s.change_class(2)
+        self.assertEqual(0, ToricLattice.compare(s, s_orig))
 
-        s.apply_vert_z()
-        self.assertTrue(s.has_vert_z())
-        s.apply_vert_z()
-        self.assertFalse(s.has_vert_z())
+        s.change_class(1)
+        self.assertEqual(1, ToricLattice.compare(s, s_orig))
+        s.change_class(1)
+        self.assertEqual(0, ToricLattice.compare(s, s_orig))
