@@ -9,6 +9,8 @@ def to_n(state):
     # WARNING - only represents z errors
     ans = 0
     for i,j in state.qubit_indices:
+        if state._array[i,j] > 1:
+            raise RuntimeError('to_n passed a[{0}][{1}] = {2}: should only be used for z errors (0 or 1)'.format(i,j,state._array[i,j]))
         ans = ans*2 + state._array[i,j]
     return ans
 
@@ -26,10 +28,10 @@ class ConjugacyClasses:
 
         s2 = s.copy()
 
-        stab_gens = slf.stab_gens = [to_n(s.copy_onto(s2).apply_stabiliser(i, j)) for i,j in s.z_stabiliser_indices[:-1]]
+        stab_gens = slf.stab_gens = [to_n(s.copy_onto(s2).apply_stabiliser(i, j)) for i,j in s.x_stabiliser_indices[:-1]]
 
-        z_hor = slf.z_hor = to_n(s.copy_onto(s2).apply_hor_z())
-        z_vert = slf.z_vert = to_n(s.copy_onto(s2).apply_vert_z())
+        z_hor = slf.z_hor = to_n(s.copy_onto(s2).change_class(lattice.HOR_Z))
+        z_vert = slf.z_vert = to_n(s.copy_onto(s2).change_class(lattice.VERT_Z))
         z_hor_vert = slf.z_hor_vert = z_hor ^ z_vert
 
         print("stab_gens found")

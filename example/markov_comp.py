@@ -11,37 +11,26 @@ size = 6
 ccs = cc.ConjugacyClasses(st.ToricLattice(size))
 
 def go(prob):
-    s = st.UniformToricState(6, prob)
+    hor_z = st.ToricLattice.HOR_Z
+    vert_z = st.ToricLattice.VERT_Z
 
-    #s.generate_just_z_errors()
-    m = s.generate_matching()
-    #hor_z = s.has_hor_z()
-    #vert_z = s.has_vert_z()
+    s_orig = st.UniformToricState(6, prob)
 
-    # forget the original error confic
-    s.array[:] = m[:]
+    s_orig.generate_just_z_errors()
+    synd = s_orig.syndrome()
 
-    sv = s.copy().apply_hor_z()
-    sh = s.copy().apply_vert_z()
-    shv = s.copy().apply_vert_z().apply_hor_z()
+    s = st.UniformToricState.from_syndrome(6, prob, synd)
+
+    sv = s.copy().change_class(vert_z)
+    sh = s.copy().change_class(hor_z)
+    shv = s.copy().change_class(hor_z + vert_z)
 
     p = ch.path(s)
     pv = ch.path(sv)
     ph = ch.path(sh)
     phv = ch.path(shv)
 
-    #if not hor_z and not vert_z:
-        ## identity is the right answer
     paths = [p, pv, ph, phv]
-    #elif hor_z and not vert_z:
-        ## we have a vert_z_loop
-        #paths = [pv, p, ph, phv]
-    #elif not hor_z and vert_z:
-        ## we have a hor_z_loop
-        #paths = [ph, p, pv, phv]
-    #else:
-        #paths = [phv, p, pv, ph]
-
 
     i, v, h, vh = ccs.lookup_hist(cc.to_n(s))
 
