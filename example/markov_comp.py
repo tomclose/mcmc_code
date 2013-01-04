@@ -14,12 +14,12 @@ def go(prob):
     hor_z = st.ToricLattice.HOR_Z
     vert_z = st.ToricLattice.VERT_Z
 
-    s_orig = st.UniformToricState(6, prob)
+    s_orig = st.ZUniformToricState(6, prob)
 
-    s_orig.generate_just_z_errors()
+    s_orig.generate_errors()
     synd = s_orig.syndrome()
 
-    s = st.UniformToricState.from_syndrome(6, prob, synd)
+    s = st.ZUniformToricState.from_syndrome(6, prob, synd)
 
     sv = s.copy().change_class(vert_z)
     sh = s.copy().change_class(hor_z)
@@ -43,5 +43,8 @@ def go(prob):
     ps = ch.path_set(*[ch.n_jumps(ch.average_err(p), n_steps) for p in paths])
 
     for a in ps:
-        print(av_i, av_v, av_h, av_vh)
-        print([b[0]*1.0/b[2] for b in a])
+        avs = [b[0]*1.0/b[2] for b in a]
+        calculated = [av_i, av_v, av_h, av_vh]
+        print("Average:        {:7.2f} {:7.2f} {:7.2f} {:7.2f}".format(*avs))
+        diff = [avs[i] - calculated[i] for i in range(4)]
+        print("Comp to theory: {:7.2f} {:7.2f} {:7.2f} {:7.2f}".format(*diff))

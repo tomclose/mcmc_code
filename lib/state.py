@@ -318,8 +318,6 @@ class ToricLattice:
         return np.array([[t(elt) for elt in s.split(" ")] for s in string.strip().split('\n')])
 
 
-
-
 class UniformToricState(ToricLattice):
     def __init__(self, L, p):
         ToricLattice.__init__(self, L)
@@ -337,21 +335,7 @@ class UniformToricState(ToricLattice):
         n2 = s2.n_errors()
         x = self.p/(1-self.p)
         diff = n2 - n
-        #print(n2, n, self.p,x, diff, x**diff )
-
         return x**diff
-
-    def generate_just_z_errors(self):
-        n_qubits = len(self.qubit_indices)
-        errors = np.random.rand(n_qubits) < self.p
-        self._array[zip(*self.qubit_indices)] = errors
-        self.count_errors()
-
-    def generate_just_x_errors(self):
-        n_qubits = len(self.qubit_indices)
-        errors = np.random.rand(n_qubits) < self.p
-        self._array[zip(*self.qubit_indices)] = 2*errors
-        self.count_errors()
 
     def generate_errors(self):
         n_qubits = len(self.qubit_indices)
@@ -375,9 +359,9 @@ class UniformToricState(ToricLattice):
 
     def generate_next(s):
         # pick a random z site
-        n = len(s.x_stabiliser_indices)
+        n = len(s.stabiliser_indices)
         r = np.random.random_integers(0, n-1)
-        x, y = s.x_stabiliser_indices[r]
+        x, y = s.stabiliser_indices[r]
         # apply the stabilizer at that point
         s.apply_stabiliser(x,y)
 
@@ -387,7 +371,35 @@ class UniformToricState(ToricLattice):
         return ToricLattice.from_syndrome(L, syndrome, s)
 
 
+class ZUniformToricState(UniformToricState):
+    def generate_errors(self):
+        n_qubits = len(self.qubit_indices)
+        errors = np.random.rand(n_qubits) < self.p
+        self._array[zip(*self.qubit_indices)] = errors
+        self.count_errors()
 
+    def generate_next(s):
+        # pick a random z site
+        n = len(s.x_stabiliser_indices)
+        r = np.random.random_integers(0, n-1)
+        x, y = s.x_stabiliser_indices[r]
+        # apply the stabilizer at that point
+        s.apply_stabiliser(x,y)
+
+class XUniformToricState(UniformToricState):
+    def generate_errors(self):
+        n_qubits = len(self.qubit_indices)
+        errors = np.random.rand(n_qubits) < self.p
+        self._array[zip(*self.qubit_indices)] = 2*errors
+        self.count_errors()
+
+    def generate_next(s):
+        # pick a random x site
+        n = len(s.z_stabiliser_indices)
+        r = np.random.random_integers(0, n-1)
+        x, y = s.z_stabiliser_indices[r]
+        # apply the stabilizer at that point
+        s.apply_stabiliser(x,y)
 
 
 
