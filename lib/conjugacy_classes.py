@@ -1,4 +1,5 @@
 import numpy as np
+import csv
 import matplotlib.pyplot as plt
 import matplotlib as matplotlib # wtf? it should work without this
 
@@ -8,11 +9,23 @@ def bitsum(x):
 def to_n(state):
     # WARNING - only represents z errors
     ans = 0
+    l = 0
     for i,j in state.qubit_indices:
         if state._array[i,j] > 1:
             raise RuntimeError('to_n passed a[{0}][{1}] = {2}: should only be used for z errors (0 or 1)'.format(i,j,state._array[i,j]))
-        ans = ans*2 + state._array[i,j]
+        ans += (state._array[i,j] << l)
+        l += 1
     return ans
+
+def set_state(state, n):
+    l = 0
+    for i, j in state.qubit_indices:
+        if n & (1 << l):
+            state.set_qubit(i, j, state.Z)
+        else:
+            state.set_qubit(i, j, 0)
+        l += 1
+    return state
 
 class ConjugacyClasses:
     """ Generates a full set of states and categorises
@@ -163,6 +176,118 @@ class ConjugacyClasses:
 # in fact assume we can identify the best group arbitrarily (we could decide the result for each syndrome beforehand)
 # then the probability is just the sum of the probabilities of the best group out of each
 
+def stab_gen_effect(state, i, j):
+    state.apply_stabiliser(i, j)
+    n = to_n(state)
+    state.apply_stabiliser(i, j) # undo
+    return n
+
+def stab_gens(s):
+    if s.n_errors() > 0:
+        raise RuntimeError("Must be passed a clean state")
+    return [stab_gen_effect(s, i, j) for i, j in s.z_stabiliser_indices]
+
+def stab_effect(stab_gens, n):
+    """ Returns the stabiliser effect for stabiliser
+    described by n
+    NB: 0 <= n < 2**m, but effect will only be unique
+        for 0 <= n < 2**(m-1)
+    """
+    stab = 0
+    bitstr = bin(n)[2:] # change n to binary string
+    m = len(bitstr)
+    for i in range(m):
+        stab ^= int(bitstr[m-1-i]) * stab_gens[i]
+    return stab
+
+def stabilisers(s):
+    gens = stab_gens(s)
+    n = len(gens)
+    return [stab_effect(gens, x) for x in range(2**(n - 1))]
+
+def orbit(stabs, n):
+    return [n^s for s in stabs]
+
+def conj_class_gens(s):
+    vert_z = to_n(s.change_class(s.VERT_Z))
+    s.change_class(s.VERT_Z)
+    hor_z = to_n(s.change_class(s.HOR_Z))
+    hor_vert_z = to_n(s.change_class(s.VERT_Z))
+    s.change_class(s.VERT_Z + s.HOR_Z) # reset
+    return [0, vert_z, hor_z, hor_vert_z]
+
+def matching(syndrome_n, state):
+    stab_ind = state.x_stabiliser_indices #=> (1,1), (1,3), (3,1), (3,3)
+    n_stabs = len(stab_ind) #=> 4
+    synd = []
+    # map the syndrome_n onto the first n_stab -1 indices
+    for i in range(n_stabs - 1): # eg 0, 1, 2
+        if syndrome_n & ( 1 << (n_stabs - 1 - i)): # eg 
+            synd.append(stab_ind[i])
+    if bitsum(syndrome_n) & 1: # odd number of stabilisers
+        synd.append(stab_ind[-1])
+    match = state.__class__.from_syndrome(state.L, synd)
+    return to_n(match)
+
+def error_dist(orbit):
+    dist = {}
+    for x in orbit:
+        b = bitsum(x)
+        try:
+            dist[b] += 1
+        except KeyError: # first time we've seen it
+            dist[b] = 1
+    return dist
+
+def hist_row(error_dist, max_poss):
+    return [error_dist.get(i, 0) for i in range(max_poss + 1)]
 
 
+def state_list(s):
+    stabs = stabilisers(s)
+    conj_classes = conj_class_gens(s)
+    for i, stab in enumerate(stabs):
+        match = matching(i, s)
+        for conj_class in conj_classes:
+            yield orbit(stabs, match^conj_class)
+
+def hist_file_rows(s):
+    stabs = stabilisers(s)
+    conj_classes = conj_class_gens(s)
+    for i, stab in enumerate(stabs):
+        match = matching(i, s)
+        for conj_class in conj_classes:
+            orb = orbit(stabs, match^conj_class)
+            yield [ stab, conj_class] + hist_row(error_dist(orb), s.L**2/2)
+
+def write_hist_file(s, filename = None):
+    if filename is None:
+        filename = './data/hist_{}.csv'.format(s.L)
+    with open(filename, 'wb') as csvfile:
+        writer = csv.writer(csvfile)
+        for histrow in hist_file_rows(s):
+            writer.writerow(histrow)
+
+def read_hist_file_rows(filename):
+    with open(filename, 'rb') as csvfile:
+        reader = csv.reader(csvfile)
+        for row in reader:
+            yield row
+
+def array_from_file_rows(rows):
+    return np.array([r for r in rows], dtype='int')
+
+def class_probabilities(row_array, p):
+    # row_array has format [syndrome, logical_error, count(n_errors = 0), count(n_errors = 1), .... ]
+    num_classes, total_errors = np.shape(row_array[:, 2:])
+    if p == 0:
+        q = 0
+    else:
+        q = p/(1-p)
+    prob_row = q ** np.arange(total_errors)
+    class_probs = (1-p)**(total_errors-1) * np.dot(row_array[:, 2:], prob_row)
+    results = np.zeros((num_classes, 2))
+    results[:, 0] = row_array[:, 0]
+    results[:, 1] = class_probs
+    return results
 

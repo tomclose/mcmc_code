@@ -1,5 +1,5 @@
 import numpy as np
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 
 class ToricLattice:
@@ -49,8 +49,8 @@ class ToricLattice:
         self.z_j_indices = range(1, L, 2)
         self.x_stabiliser_indices = [(i,j) for i in self.x_i_indices for j in self.x_j_indices]
         self.z_stabiliser_indices = [(i,j) for i in self.z_i_indices for j in self.z_j_indices]
-        self.qubit_indices = [(i,j) for j in range(0, self.L) for i in range((j+1)%2, self.L, 2)]
-        self.stabiliser_indices = [(i,j) for j in range(0, self.L) for i in range(j%2, self.L, 2)]
+        self.qubit_indices = [(i,j) for i in range(0, self.L) for j in range((i+1)%2, self.L, 2)]
+        self.stabiliser_indices = [(i,j) for i in range(0, self.L) for j in range(i%2, self.L, 2)]
         self._n_errors = 0
         self._syndrome = None
 
@@ -65,8 +65,22 @@ class ToricLattice:
                 self._n_errors -= 1
         self._array[i,j] = new_val
 
+    def set_qubit(self, i, j, value):
+        val = self._array[i,j]
+        new_val = value
+        if val == 0:
+            if new_val > 0:
+                self._n_errors += 1
+        else: # val > 0
+            if new_val == 0:
+                self._n_errors -= 1
+        self._array[i,j] = new_val
+
     def qubit(self, i, j):
         return self._array[i,j]
+
+    def qubits(self):
+        return self._array[zip(*self.qubit_indices)]
 
     def qubit_line(self, direction, inbetween):
         return self._array[zip(*self.qubit_line_ij(direction, inbetween))]
@@ -144,8 +158,16 @@ class ToricLattice:
         #             2 for a Z
         #             0 for qubit
         # NB passing in a qubit site will silently have no effect
+        
+        # need to Z flip around Xs and X flip around Z
+        if site_type == 1:
+            flip_type = 2
+        elif site_type == 2:
+            flip_type = 1
+        else:
+            flip_type = 0
         for i,j in s.neighbours(x,y):
-            s.flip_qubit(i,j, site_type)
+            s.flip_qubit(i,j, flip_type)
         return s
 
     def measure_stabiliser(s, x, y):

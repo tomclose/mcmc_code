@@ -32,14 +32,24 @@ def aggregate(c):
         p += s.likelihood()
         yield (i, p)
 
-def n_jumps(c, n):
-    return it.islice(c, n, None, n)
+def in_jumps_of(n, c):
+    return it.islice(c, n-1, None, n)
 
-def first_n(c, n):
+def first_n(n, c):
     return it.islice(c, 0, n)
 
 def path_set(*paths):
     return it.izip(*paths)
+
+def totals(p):
+    n_changes = 0
+    count = 0
+    total_n = 0
+    for current, next_s, changed in p:
+        n_changes += changed
+        count+=1
+        total_n += current.n_errors()
+        yield (total_n, n_changes, count)
 
 
 def average_err(p):
