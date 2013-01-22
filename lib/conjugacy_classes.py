@@ -280,14 +280,22 @@ def array_from_file_rows(rows):
 def class_probabilities(row_array, p):
     # row_array has format [syndrome, logical_error, count(n_errors = 0), count(n_errors = 1), .... ]
     num_classes, total_errors = np.shape(row_array[:, 2:])
-    if p == 0:
-        q = 0
-    else:
+    if p < 0.5: # rules out p = 1
         q = p/(1-p)
-    prob_row = q ** np.arange(total_errors)
-    class_probs = (1-p)**(total_errors-1) * np.dot(row_array[:, 2:], prob_row)
+        prob_row = (1-p)**(total_errors-1) * q ** np.arange(total_errors)
+    else: # p != 0
+        q = (1-p)/p
+        prob_row = p **(total_errors-1) * q ** np.arange(total_errors-1, -1, -1)
+    class_probs = np.dot(row_array[:, 2:], prob_row)
     results = np.zeros((num_classes, 2))
     results[:, 0] = row_array[:, 0]
     results[:, 1] = class_probs
     return results
+
+def success_probability(row_array, p):
+    probs = class_probabilities(row_array, p)
+    x = probs[:, 1].reshape((-1, 4))
+    max_probs = np.max(x, axis = 1)
+    return np.sum(max_probs)
+
 
