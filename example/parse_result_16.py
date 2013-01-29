@@ -85,15 +85,21 @@ def gather_results(pattern):
                 n_success = 0
                 for run in runs:
                     lines = [l for l in run]
-                    n, final_totals = lines[-1]
+                    if len(lines) ==0:
+                        print("No lines in file {}".format(file_name))
+                        break
+                    step_n, final_totals = lines[-1]
                     f = final_totals[0]
                     success = reduce(lambda x, y: x and y,
                                         [f <= v for v in final_totals[1:]],
                                         True)
                     n += 1
                     if success: n_success += 1
-                p = n_success*1.0/success
-                results.append([prob, size, p])
+                if n==0:
+                    p = 0
+                else:
+                    p = n_success*1.0/n
+                results.append([prob, size, n_success, n])
     return results
 
 
