@@ -10,6 +10,7 @@ def parse_file(f):
         l = f.next() #get second line
     except StopIteration:
         print("File {} is not a results file".format(f.name))
+        raise StopIteration
     if re.match('Size: (\d+), Prob: (\d+\.\d+), n_steps: (\d+), n_trials: (\d+)', l):
         m = re.match('Size: (\d+), Prob: (\d+\.\d+), n_steps: (\d+), n_trials: (\d+)', l)
         size, p, n_steps, n_trials = m.groups()
@@ -18,6 +19,7 @@ def parse_file(f):
         yield (size, p, contentParser(f))
     else:
         print("{} is not a results file".format(f.name))
+        raise StopIteration
 
 class contentParser:
     """
