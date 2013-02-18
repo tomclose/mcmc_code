@@ -17,13 +17,13 @@ class TestToN(unittest.TestCase):
         # 0 errors should always map to 0
         self.assertEqual(cc.to_n(s), 0)
         # find stabiliser representation
-        stab_n = cc.to_n(s.apply_stabiliser(0,0))
+        stab_n = cc.to_n(s.apply_stabiliser(1,1))
         # check stabiliser rep looks sensible
         self.assertEqual(cc.bitsum(stab_n), 4)
         # do commutativity consistency check
         s.generate_errors()
         n1 = cc.to_n(s)^stab_n # convert then apply stab
-        n2 = cc.to_n(s.apply_stabiliser(0,0)) # apply stab then convert
+        n2 = cc.to_n(s.apply_stabiliser(1,1)) # apply stab then convert
         self.assertEqual(n1, n2)
 
     def testSetState(self):
@@ -41,24 +41,23 @@ class TestToN(unittest.TestCase):
         cc.set_state(s, n)
         new_qubits = [s.qubit(i,j) for i, j in s.qubit_indices]
         self.assertEqual(old_qubits, new_qubits)
-        
 
     def testStabGenEffect(self):
-        # X 1 X 1
-        # 1 Z 0 Z
-        # X 0 X 0
-        # 1 Z 0 Z # => 01000111 = 
+        # X 1 X 0
+        # 1 Z 1 Z
+        # X 1 X 0
+        # 0 Z 0 Z # => 00011101 = 
         state = st.ToricLattice(4)
-        x = cc.stab_gen_effect(state, 0, 0)
-        self.assertEqual(x, int('01000111', 2))
+        x = cc.stab_gen_effect(state, 1, 1)
+        self.assertEqual(x, int('00011101', 2))
 
     def testStabGens(self):
         state = st.ToricLattice(4)
         stab_gens = cc.stab_gens(state)
-        actual_stab_gens = [int('01000111', 2),
-                            int('10001011', 2),
-                            int('01110100', 2),
-                            int('10111000', 2)]
+        actual_stab_gens = [int('00011101', 2),
+                            int('00101110', 2),
+                            int('11010001', 2),
+                            int('11100010', 2)]
         self.assertSameElts(stab_gens, actual_stab_gens)
 
     def testStabEffect(self):
@@ -76,14 +75,21 @@ class TestToN(unittest.TestCase):
     def testStabilisers(self):
         state = st.ToricLattice(4)
         # there are 8 independent stabilisers
+        # note that stabilisers are labelled starting
+        # at top left, as are qubits
+        # stabiliser 1:
+        # X 1 X 0
+        # 1 * 1 Z
+        # X 1 X 0
+        # 0 Z 0 Z # => 00011101
         actual_stabs = [ 0,
-                        int('01000111', 2), #1
-                        int('10001011', 2), #2
-                        int('11001100', 2), #3
-                        int('01110100', 2), #4
-                        int('00110011', 2), #5
+                        int('00011101', 2), #1
+                        int('00101110', 2), #2
+                        int('00110011', 2), #3
+                        int('11010001', 2), #4
+                        int('11001100', 2), #5
                         int('11111111', 2), #6
-                        int('10111000', 2)] #7
+                        int('11100010', 2)] #7
         stabs = cc.stabilisers(state)
         self.assertSameElts(stabs, actual_stabs)
 
@@ -94,13 +100,13 @@ class TestToN(unittest.TestCase):
         self.assertSameElts(cc.orbit(stabs, 0), stabs)
         # now look at the orbit of 1
         actual_orb = [int('00000001', 2), # apply 0
-                      int('01000110', 2), # apply 1
-                      int('10001010', 2), # apply 2
-                      int('11001101', 2), # apply 3
-                      int('01110101', 2), # apply 4
-                      int('00110010', 2), # apply 5
+                      int('00011100', 2), # apply 1
+                      int('00101111', 2), # apply 2
+                      int('00110010', 2), # apply 3
+                      int('11010000', 2), # apply 4
+                      int('11001101', 2), # apply 5
                       int('11111110', 2), # apply 6
-                      int('10111001', 2)] # apply 7
+                      int('11100011', 2)] # apply 7
         self.assertSameElts(cc.orbit(stabs, 1), actual_orb)
 
     def testConjClassGens(self):
@@ -141,6 +147,50 @@ class TestToN(unittest.TestCase):
         answer = cc.hist_row(error_dist, 5)
         self.assertEqual(correct_answer, answer)
 
+    def testOverlapArray(self):
+        a2 = cc.overlap_array(2)
+        r2 = [[0], [1]]
+        self.assertArrayEqual(a2, r2)
+        r4 = [[0, 2, 2, 2, 2, 2, 2, 4],
+              [2, 0, 2, 2, 2, 2, 4, 2],
+              [2, 2, 0, 2, 2, 4, 2, 2],
+              [2, 2, 2, 0, 4, 2, 2, 2],
+              [2, 2, 2, 4, 0, 2, 2, 2],
+              [2, 2, 4, 2, 2, 0, 2, 2],
+              [2, 4, 2, 2, 2, 2, 0, 2],
+              [4, 2, 2, 2, 2, 2, 2, 0],
+              [1, 1, 1, 3, 1, 3, 3, 3],
+              [1, 1, 3, 1, 3, 1, 3, 3],
+              [1, 3, 1, 1, 3, 3, 1, 3],
+              [3, 1, 1, 1, 3, 3, 3, 1],
+              [1, 3, 3, 3, 1, 1, 1, 3],
+              [3, 1, 3, 3, 1, 1, 3, 1],
+              [3, 3, 1, 3, 1, 3, 1, 1],
+              [3, 3, 3, 1, 3, 1, 1, 1]]
+        a4 = cc.overlap_array(4)
+        self.assertArrayEqual(a4, r4)
+
+    def testSyndIndexedBy(self):
+        self.assertEqual(int('1001', 2), cc.synd_indexed_by(int('0001', 2), 4))
+        self.assertEqual(int('0011', 2), cc.synd_indexed_by(int('0011', 2), 4))
+        self.assertEqual(int('1011', 2), cc.synd_indexed_by(int('1011', 2), 4))
+        self.assertEqual(int('0001', 2), cc.synd_indexed_by(int('1001', 2), 4))
+
+    def testSyndromeProbs(self):
+        n = 4
+        p = 0.15
+        pp = cc.syndrome_probs(n, p)
+        n_stabs = (n/2)**2
+        print(n_stabs)
+        norm_odd = (1 - (1 - 2*p)**n_stabs)/2
+        norm_even = (1 + (1 - 2*p)**n_stabs)/2
+        n_rows = 2**n_stabs
+        results = np.ones(n_rows)
+        results[0:n_rows/2] *= norm_even
+        results[n_rows/2:] *= norm_odd
+        totals = np.sum(pp, axis=1)
+        np.testing.assert_allclose(totals, results)
 
 
-
+    def testNoisyProb(self):
+        pass

@@ -207,14 +207,20 @@ class ToricLattice:
         return s
 
     @classmethod
-    def compare(cls, s1, s2):
+    def compare(cls, s1, s2=None):
         """ Returns the number of the syndrome 
             xHor zHor xVert zVert
             i.e 4 = zHor
                 5 = zHor, zVert
                 15 = zHor, zVert, xHor, xVert
+
+            If no second state is provided, defaults to the zero state
+
         """
-        s = cls.multiply(s1, s2) # is self the class here
+        if s2 is None:
+            s = s1
+        else:
+            s = cls.multiply(s1, s2) # is self the class here
         result = 0
         result += cls.VERT_Z if reduce(lambda v, q: q^v, s.qubit_line('col', inbetween='z')) & 1 else 0
         result += cls.HOR_Z  if reduce(lambda v, q: q^v, s.qubit_line('row', inbetween='z')) & 1 else 0
@@ -355,6 +361,7 @@ class UniformToricState(ToricLattice):
         # returns p(s2)/p(self)
         n = self.n_errors()
         n2 = s2.n_errors()
+
         x = self.p/(1-self.p)
         diff = n2 - n
         return x**diff
