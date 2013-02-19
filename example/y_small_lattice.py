@@ -20,7 +20,7 @@ def n_to_syndrome(n):
 
 def synd_classes():
     synd_classes = {}
-    for i in range(2**(size**2)):
+    for i in range(2**(size**2/2)):
         synd = n_to_syndrome(i)
         if (synd,0) in synd_classes:
             # find new class
