@@ -83,6 +83,33 @@ def n_to_syndrome(state, n):
     state.syndrome(refresh=True)
     return syndrome_to_n(state)
 
+def synd_classes(state, l_n_to_class=None, l_n_to_syndrome=None):
+    # we want to memoize these functions. Either let them be passed
+    # in from the environment, or define them ourselves
+    if l_n_to_class is None:
+        @memoize
+        def l_n_to_class(n):
+            return n_to_class(state, n)
+    if l_n_to_syndrome is None:
+        @memoize
+        def l_n_to_syndrome(n):
+            return n_to_syndrome(state, n)
+    size = state.L
+    synd_classes = {}
+    for i in range(2**(size**2/2)):
+        synd = l_n_to_syndrome(i)
+        if (synd,0) in synd_classes:
+            # find new class
+            c = l_n_to_class(i^synd_classes[(synd, 0)][0])
+            if (synd, c) in synd_classes:
+                synd_classes[(synd, c)].append(i)
+            else: #new class for that sydrome
+                synd_classes[(synd, c)] = [i]
+        else: #new syndrome
+            synd_classes[(synd, 0)] = [i]
+    return synd_classes
+
+
 def error_dist(orbit):
     dist = {}
     for x in orbit:
