@@ -18,13 +18,17 @@ class memoize(dict):
 def bitsum(x):
     return bin(x).count('1')
 
-@np.vectorize
+#@np.vectorize
+#def error_count(x):
+   #count = 0
+   #while(x > 0):
+       #count += 1 if x&3 > 0 else 0
+       #x = x >> 2
+   #return count
+
 def error_count(x):
-    count = 1 if x%4 > 0 else 0
-    while(x/4 > 0):
-        x = x/4
-        count += 1 if x%4 > 0 else 0
-    return count
+    r = 3 << np.arange(0,16, 2)
+    return np.sum(np.bitwise_and.outer(r, x)>0, axis=0)
 
 def errors_to_n(state):
     ans = 0
