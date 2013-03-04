@@ -16,6 +16,7 @@ a4 = cc.array_from_file_rows(rows4)
 a6 = cc.array_from_file_rows(rows6)
 a8 = cc.array_from_file_rows(rows8)
 
+# count the number of unique rows
 d2 = defaultdict(int)
 for e in a2:
     d2[tuple(e[2:])]+=1

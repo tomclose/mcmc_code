@@ -128,3 +128,20 @@ class TestYConjClasses(unittest.TestCase):
 
     def testSuccessProbability(self):
         pass
+
+    def testBinaryCombinations(self):
+        self.assertSameElts(fcc.binary_combinations(1, 0), [0])
+        self.assertSameElts(fcc.binary_combinations(1, 1), [1])
+        self.assertSameElts(fcc.binary_combinations(2, 1), [1, 2])
+        self.assertSameElts(fcc.binary_combinations(2, 2), [3])
+        self.assertSameElts(fcc.binary_combinations(4, 2), [3, 5, 9, 6, 10, 12])
+
+    def testXSyndsNearZero(self):
+        # (0)000 => (1)000, (0)001, (0)010, (0)100
+        # (1)000 => (0)000, (1)001, (1)010, (1)100
+        self.assertSameElts(fcc.x_synds_near_zero(3, 1), [0, 1, 2, 4])
+
+
+    def testSyndsNearZero(self):
+        # (0)00(0)00, 2 => (1)01(0)00, (1)10(0)00, (0)11(0)00, (0)00(1)01, (0)00(1)10, (0)00(0)11
+        self.assertSameElts(fcc.synds_near_zero(2, 2, 0, 0), [4, 8, 12, 1, 2, 3])

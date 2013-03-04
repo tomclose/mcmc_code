@@ -1,6 +1,7 @@
 import numpy as np
 import state as st
 import csv
+import itertools as it
 
 #http://wiki.python.org/moin/PythonDecoratorLibrary#Memoize
 class memoize(dict):
@@ -27,7 +28,8 @@ def bitsum(x):
    #return count
 
 def error_count(x):
-    r = 3 << np.arange(0,16, 2)
+    # good up to 20 errors
+    r = 3 << np.arange(0, 40, 2)
     return np.sum(np.bitwise_and.outer(r, x)>0, axis=0)
 
 def errors_to_n(state):
@@ -234,6 +236,13 @@ def write_hist_file(size, filename=None, start=0, stop=None):
             a[2:] = hist_row(orb, max_poss)
             writer.writerow(a)
 
+def read_hist_file(size, filename=None):
+    if filename is None:
+        filename = './data/full_hist_{}.csv'.format(size)
+    with open(filename, 'rb') as csvfile:
+        reader = csv.reader(csvfile)
+        return np.array([r for r in reader], dtype='int64')
+
 def hist_array(size):
     max_poss = size**2/2
     a = np.zeros((4**(max_poss), max_poss+3), dtype='int64')
@@ -264,5 +273,38 @@ def max_class_probs(row_array, p):
 
 def success_probability(row_array, p):
     return np.sum(max_class_probs(row_array, p))
+
+def binary_combinations(n, r):
+    """ Returns the set of integers with binary representation of length n,
+    containing exactly r 1s"""
+    return [sum(1<<x for x in c) for c in it.combinations(range(n), r)]
+
+def x_synds_near_zero(n, r):
+    """ Returns the synds a distance r from 0.
+    Note that this will work for any n, r returning synds in the
+    code space. In some cases this won't be appropriate e.g.
+    (3, 1) => 0, 1, 2, 4
+    but none of these will be right - there are no synds in the code
+    space one away from 0. These numbers actually represent the synds
+    0000, 1001, 1010 and 1100.
+    However we could use these numbers if trying to find the synds
+    1 away from (1)001 """
+    # (0)000 => (1)000, (0)001, (0)010, (0)100
+    # (1)000 => (0)000, (1)001, (1)010, (1)100
+    if r == 0:
+        return [ 0 ]
+    else:
+        # combine lists: choose the parity stabiliser, don't choose the parity stabiliser
+        return binary_combinations(n, r - 1) + binary_combinations(n, r)
+
+
+def synds_near_zero(n, r, x_parity, z_parity):
+    """ The stabilisers a distance r away from the 0 stabiliser """
+    if (x_parity + z_parity + r)%2 != 0:
+        return []
+    else:
+        return [ x + (z<<n) for m in range(x_parity, r+1, 2) for x in x_synds_near_zero(n, m) for z in x_synds_near_zero(n, r-m)]
+
+
 
 
