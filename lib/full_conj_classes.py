@@ -298,13 +298,48 @@ def x_synds_near_zero(n, r):
         return binary_combinations(n, r - 1) + binary_combinations(n, r)
 
 
-def synds_near_zero(n, r, x_parity, z_parity):
+def synds_near_zero(n, r, z_parity, x_parity):
     """ The stabilisers a distance r away from the 0 stabiliser """
     if (x_parity + z_parity + r)%2 != 0:
+        print("parity check failed")
         return []
     else:
         return [ x + (z<<n) for m in range(x_parity, r+1, 2) for x in x_synds_near_zero(n, m) for z in x_synds_near_zero(n, r-m)]
 
+def synds_within_r(n, r, z_parity, x_parity):
+    dists = []
+    all_synds = []
+    for m in range(r + 1):
+        synds = synds_near_zero(n, m, z_parity, x_parity)
+        all_synds += synds
+        dists += [ m for i in range(len(synds)) ]
+    return (dists, all_synds)
 
+@memoize
+def nearby_indices_matrix(size, r, z_parity, x_parity):
+    n_ind_stabs = size**2/2 - 2
+    n_ind_synds = 2**(n_ind_stabs)
+    ind_synds = np.arange(n_ind_synds, dtype='int64')
+    (dists, zero_synds) = synds_within_r(n_ind_stabs/2, r, z_parity, x_parity)
+    dists = np.array(dists)
+    zero_synd_neighbours = np.array(zero_synds, dtype='int64')
+    indices_matrix = np.bitwise_xor.outer(ind_synds, zero_synd_neighbours)
+    return (dists, indices_matrix)
 
+def weighted_near_probs(row_array, size, p_qubit, p_stab, z_parity, x_parity, r):
+    class_probs = max_class_probs(row_array, p_qubit)
+    (dists, indices_matrix) = nearby_indices_matrix(size, r, z_parity, x_parity)
+    near_probs = class_probs[indices_matrix]
+    n_all_stabs = size**2/2
+    return (1 - p_stab) ** (n_all_stabs - dists) * p_stab ** dists * near_probs
 
+def noisy_prob(row_array, size, p_qubit, p_stab, r):
+    wnp00 = weighted_near_probs(row_array, size, p_qubit, p_stab, 0, 0, r)
+    best_probs00 = np.max(wnp00, axis=1)
+    wnp01 = weighted_near_probs(row_array, size, p_qubit, p_stab, 0, 1, r)
+    best_probs01 = np.max(wnp01, axis=1)
+    wnp10 = weighted_near_probs(row_array, size, p_qubit, p_stab, 1, 0, r)
+    best_probs10 = np.max(wnp10, axis=1)
+    wnp11 = weighted_near_probs(row_array, size, p_qubit, p_stab, 1, 1, r)
+    best_probs11 = np.max(wnp11, axis=1)
+    return np.sum(best_probs00) + np.sum(best_probs01) + np.sum(best_probs10) + np.sum(best_probs11)

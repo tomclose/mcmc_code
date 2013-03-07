@@ -145,3 +145,28 @@ class TestYConjClasses(unittest.TestCase):
     def testSyndsNearZero(self):
         # (0)00(0)00, 2 => (1)01(0)00, (1)10(0)00, (0)11(0)00, (0)00(1)01, (0)00(1)10, (0)00(0)11
         self.assertSameElts(fcc.synds_near_zero(2, 2, 0, 0), [4, 8, 12, 1, 2, 3])
+        self.assertSameElts(fcc.synds_near_zero(2, 2, 1, 0), [])
+        self.assertSameElts(fcc.synds_near_zero(2, 1, 1, 0), [4, 8, 0])
+
+    def testSyndsWhithinR(self):
+        d, s = fcc.synds_within_r(2, 0, 0, 0)
+        self.assertEqual(d, [0])
+        self.assertSameElts(s, [0])
+
+    def testNoisyProb(self):
+        ha2 = fcc.hist_array(2)
+        ha4 = fcc.hist_array(4)
+
+        # if the qubits never lie we should always be fine
+        self.assertAlmostEqual(1, fcc.noisy_prob(ha2, 2, 0, 0.4, 2))
+        # if stabilisers don't lie, results should match
+        self.assertAlmostEqual(fcc.success_probability(ha2, 0.3),
+                               fcc.noisy_prob(ha2, 2, 0.3, 0, 2))
+        self.assertAlmostEqual(fcc.success_probability(ha2, 0.01),
+                               fcc.noisy_prob(ha2, 2, 0.01, 0, 2))
+
+        # if the qubits never lie we should always be fine
+        self.assertAlmostEqual(1, fcc.noisy_prob(ha4, 4, 0, 0, 8))
+        # if stabilisers don't lie, results should match
+        self.assertAlmostEqual(fcc.success_probability(ha4, 0.3),
+                               fcc.noisy_prob(ha4, 4, 0.3, 0, 8))
