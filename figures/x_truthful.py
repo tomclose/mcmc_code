@@ -32,7 +32,7 @@ pp = np.linspace(0, 1, 101)
 fontsize=16
 
 plt.clf()
-plt.plot(pp, 1 - pp, label='bare qubit')
+#plt.plot(pp, (1 - pp)**4, label='4 bare qubit')
 plt.plot(pp, (1 - pp)**2, label='2 bare qubits')
 plt.plot(pp, [p2(p) for p in pp], label='2-code')
 plt.plot(pp, [p4(p) for p in pp], label='4-code')

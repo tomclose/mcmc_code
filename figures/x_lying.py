@@ -4,6 +4,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'lib'))
 import numpy as np
 import conjugacy_classes as cc
 import pickle
+import csv
 
 #http://wiki.python.org/moin/PythonDecoratorLibrary#Memoize
 class memoize(dict):
@@ -17,6 +18,19 @@ class memoize(dict):
         result = self[key] = self.func(*key)
         return result
 
+def save_memoized(fcn, filename):
+    path = './data/' + filename + '.csv'
+    with open(path, 'wb') as f:
+        writer = csv.writer(f)
+        for (k1, k2), v in fcn.items():
+            writer.writerow([k1, k2, v])
+
+def load_memoized(fcn, filename):
+    path = './data/' + filename + '.csv'
+    with open(path, 'rb') as f:
+        reader = csv.reader(f)
+        for k1, k2, v in reader:
+            fcn[(float(k1), float(k2))] = float(v)
 
 
 rows2 = cc.read_hist_file_rows('./data/hist_2.csv')
@@ -40,15 +54,18 @@ def p6n(qubit_error_p, stab_error_p):
     return cc.noisy_prob(a6, 6, qubit_error_p, stab_error_p)
 
 # load in memoized values
-with open('./data/p6n.pickle', 'rb') as f:
-    vals = pickle.load(f)
-    p6n.update(vals)
+#with open('./data/p6n.pickle', 'rb') as f:
+#    vals = pickle.load(f)
+#    p6n.update(vals)
 
+load_memoized(p6n, 'xp6n')
 
 #def p8n(qubit_error_p, stab_error_p):
     #return cc.noisy_prob(a8, 8, qubit_error_p, stab_error_p)
 
-qq = pp = np.linspace(0, 0.1, 51)
+#pp = qq = np.linspace(0, 0.2, 51)
+pp = np.linspace(0, 0.08, 81)
+qq = np.linspace(0, 0.02, 51)
 
 PP, QQ = np.meshgrid(pp, qq)
 
@@ -56,6 +73,8 @@ Z2 = np.array([[p2n(p, q) for p in pp] for q in qq])
 Z4 = np.array([[p4n(p, q) for p in pp] for q in qq])
 Z6 = np.array([[p6n(p, q) for p in pp] for q in qq])
 #Z8 = np.array([[p8(p, q) for p in pp] for q in qq])
+
+save_memoized(p6n, 'xp6n')
 
 bare_qubit = PP
 
@@ -66,8 +85,8 @@ ax = fig.add_subplot(111)
 
 fontsize=16
 
-ax.contour(QQ, PP, Z6 - (1 - PP), 100)
-ax.contour(QQ, PP, Z6 - (1 - PP), [0], colors = ('black'), linewidths=(3))
+ax.contour(QQ, PP, Z6 - (1 - PP)**2, 100)
+ax.contour(QQ, PP, Z6 - (1 - PP)**2, [0], colors = ('black'), linewidths=(3))
 plt.xlabel('Probability that stabiliser lies', fontsize=fontsize)
 plt.ylabel('Qubit error probability', fontsize=fontsize)
 plt.show()

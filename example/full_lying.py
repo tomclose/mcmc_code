@@ -4,6 +4,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'lib'))
 import numpy as np
 import full_conj_classes as fcc
 import pickle
+import csv
 
 #http://wiki.python.org/moin/PythonDecoratorLibrary#Memoize
 class memoize(dict):
@@ -51,7 +52,7 @@ def p6n(qubit_error_p, stab_error_p):
 def p6n2(qubit_error_p, stab_error_p):
     return fcc.noisy_prob(a6, 6, qubit_error_p, stab_error_p, 2)
 
-load_memoized(p6n2, 'p6n2')
+load_memoized(p6n2, 'fp6n2')
 
 
 #def p8n(qubit_error_p, stab_error_p):
@@ -65,7 +66,7 @@ Z2 = np.array([[p2n(p, q) for p in pp] for q in qq])
 Z4 = np.array([[p4n(p, q) for p in pp] for q in qq])
 Z6 = np.array([[p6n2(p, q) for p in pp] for q in qq])
 
-save_memoized(p6n2, 'p6n2')
+save_memoized(p6n2, 'fp6n2')
 
 #Z8 = np.array([[p8(p, q) for p in pp] for q in qq])
 

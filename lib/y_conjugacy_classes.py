@@ -157,3 +157,33 @@ def max_class_probs(row_array, p):
 def success_probability(row_array, p):
     return np.sum(max_class_probs(row_array, p))
 
+def overlap_array(n, row_array):
+    allowed_stabs = row_array[::4, 0] # possibile stabilisers
+    n_tot_stabs = 2**(n**2/2)
+    a = np.zeros((n_tot_stabs, len(allowed_stabs)), dtype='int')
+    for (j, stab) in enumerate(allowed_stabs):
+        for i in range(n_tot_stabs):
+            a[i, j] = bitsum(stab^i)
+    return a
+
+# want an vector of best we can do for each syndrome
+# want to get an array of syndrome prob weighted by
+# probability of that syndrome
+def syndrome_probs(n, p, row_array):
+    if n > 4: raise RuntimeError("Only use syndrome probs for n=2 or 4")
+    a = overlap_array(n, row_array)
+    n_stabs = n**2/2
+    if p < 0.9:
+        q = p/(1-p)
+        return (1-p)**n_stabs * q ** a
+    else:
+        raise RuntimeError("p too large")
+
+def small_noisy_prob(row_array, n, p_qubit, p_stab):
+    class_probs = max_class_probs(row_array, p_qubit)
+    synd_probs = syndrome_probs(n, p_stab, row_array)
+    weighted_synd = synd_probs * class_probs # can't do this
+    best_synd = np.max(weighted_synd, axis=1)
+    return np.sum(best_synd)
+
+
